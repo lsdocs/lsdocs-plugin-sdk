@@ -709,6 +709,7 @@ mod tests {
             site: SiteInfo {
                 title: Some("Docs".into()),
                 base_url: None,
+                root: None,
             },
             options: Value::Null,
         }

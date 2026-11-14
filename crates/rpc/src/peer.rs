@@ -301,12 +301,12 @@ impl Drop for CancelOnDrop<'_> {
             .expect("lock")
             .remove(&self.id)
             .is_some();
-        if self.armed && was_pending {
-            if let Ok(frame) =
+        if self.armed
+            && was_pending
+            && let Ok(frame) =
                 message::encode_notification(Cancel::METHOD, &CancelParams { id: self.id })
-            {
-                self.peer.try_send(frame);
-            }
+        {
+            self.peer.try_send(frame);
         }
     }
 }
