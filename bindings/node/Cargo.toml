@@ -1,14 +1,28 @@
 [package]
 name = "lsdocs-node"
-description = "Node.js bindings (napi-rs) for writing lsdocs plugins. Stub until Phase 5."
+description = "Node.js bindings (napi-rs) for writing lsdocs plugins."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[lib]
+crate-type = ["cdylib"]
+# Needs Node.js to run; tested with `node --test` instead.
+test = false
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
+lsdocs-plugin-sdk.workspace = true
 lsdocs-sdk-dynamic.workspace = true
+napi.workspace = true
+napi-derive.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[build-dependencies]
+napi-build.workspace = true
