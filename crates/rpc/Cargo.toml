@@ -4,6 +4,7 @@ description = "MessagePack RPC envelope, framing, codec, peer and transports."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [lints]
