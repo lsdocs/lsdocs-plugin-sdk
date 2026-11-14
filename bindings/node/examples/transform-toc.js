@@ -4,31 +4,21 @@
  * A JavaScript port of the first-party `transform-toc` plugin, type-checked
  * against the package's `.d.ts` (`npm run typecheck`).
  *
- * Collects each document's headings, then inserts a list of links to them
- * after the document's first heading. Headings deeper than the one before
- * them are nested under it. Documents with fewer than two headings are left
- * alone. Option `depth` (default 3) is the deepest level listed.
+ * Collects each document's section tree, then inserts a nested list of
+ * links to the sections into the document's first section, right after its
+ * title. The first section is taken as the page title, so the list holds
+ * its subsections followed by any later top-level sections. Documents with
+ * nothing to list are left alone. Option `depth` (default 3) is the deepest
+ * heading level listed.
  *
  * Its output must match the Rust plugin exactly; see test/toc-port.test.js.
  */
 
 /** @typedef {import('..').Node} Node */
-/** @typedef {{ id: string, level: number, title: string }} Entry */
+/** @typedef {{ id: string, title: string, children: Entry[] }} Entry */
 
 /** @type {typeof import('..')} */
 const { definePlugin } = require('..')
-
-/**
- * Every node, depth first, parents before children.
- * @param {Node[]} nodes
- * @returns {Generator<Node>}
- */
-function* descendants(nodes) {
-  for (const node of nodes) {
-    yield node
-    if ('children' in node) yield* descendants(node.children)
-  }
-}
 
 /**
  * @param {Node[]} nodes
@@ -45,40 +35,44 @@ function plainText(nodes) {
 }
 
 /**
- * A list of links to `entries`. Each entry is followed by the entries deeper
- * than it, which become a nested list inside its item.
- * @param {Entry[]} entries
- * @returns {Node}
+ * The sections among `nodes` as entries, leaving out sections whose title
+ * is deeper than `depth`.
+ * @param {Node[]} nodes
+ * @param {number} depth
+ * @returns {Entry[]}
  */
-function linkList(entries) {
-  /** @type {Node[]} */
-  const items = []
-  let i = 0
-  while (i < entries.length) {
-    const entry = entries[i]
-    let end = i + 1
-    while (end < entries.length && entries[end].level > entry.level) end++
-    /** @type {Node[]} */
-    const children = [
-      {
-        type: 'paragraph',
-        children: [{ type: 'link', url: `#${entry.id}`, children: [{ type: 'text', value: entry.title }] }],
-      },
-    ]
-    if (end > i + 1) children.push(linkList(entries.slice(i + 1, end)))
-    items.push({ type: 'list_item', children })
-    i = end
+function entries(nodes, depth) {
+  /** @type {Entry[]} */
+  const out = []
+  for (const node of nodes) {
+    if (node.type !== 'section' || node.id == null) continue
+    const [heading, ...rest] = node.children
+    if (heading?.type !== 'heading' || heading.level > depth) continue
+    out.push({ id: node.id, title: plainText(heading.children), children: entries(rest, depth) })
   }
-  return { type: 'list', children: items }
+  return out
 }
 
 /**
- * A `custom:toc` node wrapping a (nested) list of links.
- * @param {Entry[]} entries
+ * A list of links to `items`, with each item's children nested inside it.
+ * @param {Entry[]} items
  * @returns {Node}
  */
-function tocNode(entries) {
-  return { type: 'custom', kind: 'toc', children: [linkList(entries)] }
+function linkList(items) {
+  return {
+    type: 'list',
+    children: items.map((item) => {
+      /** @type {Node[]} */
+      const children = [
+        {
+          type: 'paragraph',
+          children: [{ type: 'link', url: `#${item.id}`, children: [{ type: 'text', value: item.title }] }],
+        },
+      ]
+      if (item.children.length > 0) children.push(linkList(item.children))
+      return /** @type {Node} */ ({ type: 'list_item', children })
+    }),
+  }
 }
 
 const plugin = definePlugin({
@@ -87,25 +81,22 @@ const plugin = definePlugin({
 
   collect(params, ctx) {
     const depth = ctx.options?.depth ?? 3
-    /** @type {Entry[]} */
-    const headings = []
-    for (const node of descendants(params.document.children)) {
-      if (node.type === 'heading' && node.id != null && node.level <= depth) {
-        headings.push({ id: node.id, level: node.level, title: plainText(node.children) })
-      }
-    }
-    return { headings }
+    return { sections: entries(params.document.children, depth) }
   },
 
   transform: {
-    nodes: ['heading'],
+    nodes: ['section'],
     handler(params) {
       const { document } = params
-      const collected = /** @type {Record<string, { headings?: Entry[] }>} */ (params.collected ?? {})
-      const entries = collected[document.source]?.headings ?? []
-      if (entries.length >= 2) {
-        const index = document.children.findIndex((n) => n.type === 'heading')
-        document.children.splice(index + 1, 0, tocNode(entries.slice(1)))
+      const collected = /** @type {Record<string, { sections?: Entry[] }>} */ (params.collected ?? {})
+      const sections = collected[document.source]?.sections ?? []
+      if (sections.length > 0) {
+        const items = [...sections[0].children, ...sections.slice(1)]
+        const title = document.children.find((n) => n.type === 'section')
+        if (items.length > 0 && title && 'children' in title) {
+          const at = title.children[0]?.type === 'heading' ? 1 : 0
+          title.children.splice(at, 0, { type: 'custom', kind: 'toc', children: [linkList(items)] })
+        }
       }
       return document
     },

@@ -1,9 +1,11 @@
 """A Python port of the first-party ``transform-toc`` plugin.
 
-Collects each document's headings, then inserts a list of links to them
-after the document's first heading. Headings deeper than the one before them
-are nested under it. Documents with fewer than two headings
-are left alone. Option ``depth`` (default 3) is the deepest level listed.
+Collects each document's section tree, then inserts a nested list of links
+to the sections into the document's first section, right after its title.
+The first section is taken as the page title, so the list holds its
+subsections followed by any later top-level sections. Documents with
+nothing to list are left alone. Option ``depth`` (default 3) is the deepest
+heading level listed.
 
 Its output must match the Rust plugin exactly; see tests/test_toc_port.py.
 """
@@ -19,13 +21,6 @@ plugin = Plugin("transform-toc-py", "0.1.0")
 Node = dict[str, Any]
 
 
-def descendants(nodes: list[Node]):
-    """Every node, depth first, parents before children."""
-    for node in nodes:
-        yield node
-        yield from descendants(node.get("children", []))
-
-
 def plain_text(nodes: list[Node]) -> str:
     out = []
     for node in nodes:
@@ -38,60 +33,70 @@ def plain_text(nodes: list[Node]) -> str:
     return "".join(out)
 
 
+def entries(nodes: list[Node], depth: int) -> list[dict[str, Any]]:
+    """The sections among ``nodes`` as ``{id, title, children}`` entries,
+    leaving out sections whose title is deeper than ``depth``."""
+    out = []
+    for node in nodes:
+        if node["type"] != "section" or node.get("id") is None:
+            continue
+        children = node.get("children", [])
+        if not children or children[0]["type"] != "heading":
+            continue
+        heading = children[0]
+        if heading["level"] > depth:
+            continue
+        out.append(
+            {
+                "id": node["id"],
+                "title": plain_text(heading.get("children", [])),
+                "children": entries(children[1:], depth),
+            }
+        )
+    return out
+
+
 @plugin.collect
 def collect(params: dict[str, Any], ctx: Context) -> Any:
     options = ctx.options or {}
-    depth = options.get("depth", 3)
-    headings = [
-        {"id": node["id"], "level": node["level"], "title": plain_text(node.get("children", []))}
-        for node in descendants(params["document"]["children"])
-        if node["type"] == "heading" and node.get("id") is not None and node["level"] <= depth
-    ]
-    return {"headings": headings}
+    return {"sections": entries(params["document"]["children"], options.get("depth", 3))}
 
 
-def link_list(entries: list[dict[str, Any]]) -> Node:
-    """A list of links to ``entries``. Each entry is followed by the entries
-    deeper than it, which become a nested list inside its item."""
-    items = []
-    i = 0
-    while i < len(entries):
-        entry = entries[i]
-        end = i + 1
-        while end < len(entries) and entries[end]["level"] > entry["level"]:
-            end += 1
+def link_list(items: list[dict[str, Any]]) -> Node:
+    """A list of links to ``items``, with each item's children nested inside
+    it."""
+    out = []
+    for item in items:
         children: list[Node] = [
             {
                 "type": "paragraph",
                 "children": [
                     {
                         "type": "link",
-                        "url": f"#{entry['id']}",
-                        "children": [{"type": "text", "value": entry["title"]}],
+                        "url": f"#{item['id']}",
+                        "children": [{"type": "text", "value": item["title"]}],
                     }
                 ],
             }
         ]
-        if end > i + 1:
-            children.append(link_list(entries[i + 1 : end]))
-        items.append({"type": "list_item", "children": children})
-        i = end
-    return {"type": "list", "children": items}
+        if item["children"]:
+            children.append(link_list(item["children"]))
+        out.append({"type": "list_item", "children": children})
+    return {"type": "list", "children": out}
 
 
-def toc_node(entries: list[dict[str, Any]]) -> Node:
-    return {"type": "custom", "kind": "toc", "children": [link_list(entries)]}
-
-
-@plugin.transform(nodes=["heading"])
+@plugin.transform(nodes=["section"])
 def apply(params: dict[str, Any], ctx: Context) -> Node:
     document = params["document"]
     collected = params.get("collected") or {}
-    entries = (collected.get(document["source"]) or {}).get("headings", [])
-    if len(entries) >= 2:
-        children = document["children"]
-        first = next((i + 1 for i, n in enumerate(children) if n["type"] == "heading"), 0)
-        children.insert(first, toc_node(entries[1:]))
+    sections = (collected.get(document["source"]) or {}).get("sections", [])
+    if sections:
+        items = sections[0]["children"] + sections[1:]
+        title = next((n for n in document["children"] if n["type"] == "section"), None)
+        if items and title is not None:
+            children = title["children"]
+            at = 1 if children and children[0]["type"] == "heading" else 0
+            children.insert(at, {"type": "custom", "kind": "toc", "children": [link_list(items)]})
     return document
 
 
