@@ -761,7 +761,27 @@ fn router(plugin: Arc<Plugin>) -> Router {
     }
     if plugin.transformer.is_some() {
         route!(request::TransformCollect, collect);
-        route!(request::TransformApply, apply);
+        // The collected data arrives once, not with every apply request;
+        // keep it and fill it into each one.
+        let collected: Arc<std::sync::Mutex<Arc<Value>>> = Arc::default();
+        let store = collected.clone();
+        router = router.request::<request::TransformCollected, _, _>(move |params, _| {
+            *store.lock().expect("not poisoned") = Arc::new(params.collected);
+            async { Ok(()) }
+        });
+        let plugin = plugin.clone();
+        let session = session.clone();
+        router = router.request::<request::TransformApply, _, _>(move |mut params, _| {
+            let plugin = plugin.clone();
+            let ctx = session.get().cloned();
+            if params.collected.is_null() {
+                params.collected = (**collected.lock().expect("not poisoned")).clone();
+            }
+            async move {
+                let ctx = ctx.ok_or_else(not_initialized)?;
+                plugin.apply(params, &ctx).await.map_err(plugin_error)
+            }
+        });
     }
     if plugin.renderer.is_some() {
         route!(request::Render, render);
