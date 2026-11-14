@@ -35,10 +35,30 @@ export type Node =
   | ({ type: 'emphasis' } & Parent)
   | ({ type: 'strong' } & Parent)
   | ({ type: 'inline_code'; value: string } & NodeBase)
-  | ({ type: 'link'; url: string; title?: string } & Parent)
+  | ({ type: 'link'; url: string; title?: string; target?: LinkTarget } & Parent)
   | ({ type: 'image'; url: string; alt?: string; title?: string } & NodeBase)
   | ({ type: 'line_break' } & NodeBase)
+  | ({ type: 'admonition'; kind: string; title?: string } & Parent)
+  | ({ type: 'definition_list' } & Parent)
+  | ({ type: 'definition_term' } & Parent)
+  | ({ type: 'definition_description' } & Parent)
+  | ({ type: 'footnote_reference'; label: string } & NodeBase)
+  | ({ type: 'footnote_definition'; label: string } & Parent)
+  | ({ type: 'math'; value: string; display?: boolean } & NodeBase)
+  | ({ type: 'figure'; id?: string } & Parent)
+  | ({ type: 'caption' } & Parent)
+  | ({ type: 'anchor'; id: string } & NodeBase)
   | ({ type: 'custom'; kind: string; attrs?: Record<string, unknown> } & Parent)
+
+/**
+ * Where a cross-reference link points inside the site: a document (source
+ * path) and/or an anchor, or an unresolved `label`.
+ */
+export interface LinkTarget {
+  document?: string
+  anchor?: string
+  label?: string
+}
 
 /** A parsed source document. */
 export interface Document {
