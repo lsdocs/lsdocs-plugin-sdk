@@ -353,7 +353,7 @@ fn call<'py>(
     let result: Result<Value, String> = py.detach(|| {
         rt.block_on(async {
             match method_name.as_str() {
-                "initialize" => to_json(Ok(plugin.initialize_result())),
+                "initialize" => to_json(Ok(plugin.initialize_result(&init))),
                 "parse" => to_json(
                     plugin
                         .parse(decode::<ParseParams>("parse", params)?, &ctx)

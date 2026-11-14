@@ -272,7 +272,7 @@ pub fn call<'env>(
         let recorder = Arc::new(Recorder::default());
         let ctx = Context::new(recorder.clone(), &init);
         let result = match method.as_str() {
-            "initialize" => to_json(Ok(plugin.initialize_result())),
+            "initialize" => to_json(Ok(plugin.initialize_result(&init))),
             "parse" => match decode::<ParseParams>("parse", params) {
                 Ok(p) => to_json(plugin.parse(p, &ctx).await),
                 Err(e) => Err(e),

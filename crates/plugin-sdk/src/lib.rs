@@ -294,7 +294,11 @@ pub struct Plugin {
     transformer: Option<Box<dyn DynTransformer>>,
     renderer: Option<Box<dyn DynRenderer>>,
     max_concurrency: Option<u32>,
+    cache_key: Option<CacheKey>,
 }
+
+/// Computes a plugin's cache key from its `initialize` params.
+type CacheKey = Box<dyn Fn(&InitializeParams) -> Option<String> + Send + Sync>;
 
 impl fmt::Debug for Plugin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -316,6 +320,7 @@ impl Plugin {
             transformer: None,
             renderer: None,
             max_concurrency: None,
+            cache_key: None,
         }
     }
 
@@ -343,6 +348,25 @@ impl Plugin {
         self
     }
 
+    /// Lets the host cache the plugin's results: they depend only on each
+    /// request, the site settings and the plugin's name, version and
+    /// options. See [`Capabilities::cache`].
+    pub fn cacheable(self) -> Self {
+        self.cache_key(|_| Some(String::new()))
+    }
+
+    /// Lets the host cache the plugin's results, as [`Plugin::cacheable`],
+    /// with a key covering any other input the plugin reads, computed from
+    /// the `initialize` params (e.g. a digest of a template file named in
+    /// the options). Returning `None` turns caching off for the session.
+    pub fn cache_key(
+        mut self,
+        key: impl Fn(&InitializeParams) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
+        self.cache_key = Some(Box::new(key));
+        self
+    }
+
     /// The plugin's name and version.
     pub fn info(&self) -> ProgramInfo {
         ProgramInfo {
@@ -351,7 +375,18 @@ impl Plugin {
         }
     }
 
-    /// What the plugin can do, derived from the parts it has.
+    /// What the plugin can do in the session `initialize` starts: its
+    /// [`Plugin::capabilities`] plus its cache key.
+    pub fn capabilities_for(&self, initialize: &InitializeParams) -> Capabilities {
+        Capabilities {
+            cache: self.cache_key.as_ref().and_then(|key| key(initialize)),
+            ..self.capabilities()
+        }
+    }
+
+    /// What the plugin can do, derived from the parts it has (without a
+    /// cache key, which depends on the session; see
+    /// [`Plugin::capabilities_for`]).
     pub fn capabilities(&self) -> Capabilities {
         Capabilities {
             parse: self.parser.as_ref().map(|p| ParseCapability {
@@ -366,15 +401,16 @@ impl Plugin {
                 site: r.site(),
             }),
             max_concurrency: self.max_concurrency,
+            cache: None,
         }
     }
 
     /// The answer to `initialize`.
-    pub fn initialize_result(&self) -> InitializeResult {
+    pub fn initialize_result(&self, initialize: &InitializeParams) -> InitializeResult {
         InitializeResult {
             protocol_version: PROTOCOL_VERSION,
             plugin: self.info(),
-            capabilities: self.capabilities(),
+            capabilities: self.capabilities_for(initialize),
         }
     }
 
@@ -727,7 +763,7 @@ fn router(plugin: Arc<Plugin>) -> Router {
                 .set(Context::new(Arc::new(PeerSink(peer)), &params))
                 .is_ok()
             {
-                Ok(init_plugin.initialize_result())
+                Ok(init_plugin.initialize_result(&params))
             } else {
                 Err(RpcError::new(
                     ErrorCode::INVALID_REQUEST,
