@@ -1,7 +1,8 @@
 """A Python port of the first-party ``transform-toc`` plugin.
 
 Collects each document's headings, then inserts a list of links to them
-after the document's first heading. Documents with fewer than two headings
+after the document's first heading. Headings deeper than the one before them
+are nested under it. Documents with fewer than two headings
 are left alone. Option ``depth`` (default 3) is the deepest level listed.
 
 Its output must match the Rust plugin exactly; see tests/test_toc_port.py.
@@ -47,26 +48,37 @@ def collect(params: dict[str, Any], ctx: Context) -> Any:
     return {"headings": headings}
 
 
+def link_list(entries: list[dict[str, Any]]) -> Node:
+    """A list of links to ``entries``. Each entry is followed by the entries
+    deeper than it, which become a nested list inside its item."""
+    items = []
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        end = i + 1
+        while end < len(entries) and entries[end]["level"] > entry["level"]:
+            end += 1
+        children: list[Node] = [
+            {
+                "type": "paragraph",
+                "children": [
+                    {
+                        "type": "link",
+                        "url": f"#{entry['id']}",
+                        "children": [{"type": "text", "value": entry["title"]}],
+                    }
+                ],
+            }
+        ]
+        if end > i + 1:
+            children.append(link_list(entries[i + 1 : end]))
+        items.append({"type": "list_item", "children": children})
+        i = end
+    return {"type": "list", "children": items}
+
+
 def toc_node(entries: list[dict[str, Any]]) -> Node:
-    items = [
-        {
-            "type": "list_item",
-            "children": [
-                {
-                    "type": "paragraph",
-                    "children": [
-                        {
-                            "type": "link",
-                            "url": f"#{entry['id']}",
-                            "children": [{"type": "text", "value": entry["title"]}],
-                        }
-                    ],
-                }
-            ],
-        }
-        for entry in entries
-    ]
-    return {"type": "custom", "kind": "toc", "children": [{"type": "list", "children": items}]}
+    return {"type": "custom", "kind": "toc", "children": [link_list(entries)]}
 
 
 @plugin.transform(nodes=["heading"])

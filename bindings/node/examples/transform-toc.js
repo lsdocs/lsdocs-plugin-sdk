@@ -5,8 +5,9 @@
  * against the package's `.d.ts` (`npm run typecheck`).
  *
  * Collects each document's headings, then inserts a list of links to them
- * after the document's first heading. Documents with fewer than two headings
- * are left alone. Option `depth` (default 3) is the deepest level listed.
+ * after the document's first heading. Headings deeper than the one before
+ * them are nested under it. Documents with fewer than two headings are left
+ * alone. Option `depth` (default 3) is the deepest level listed.
  *
  * Its output must match the Rust plugin exactly; see test/toc-port.test.js.
  */
@@ -43,29 +44,40 @@ function plainText(nodes) {
 }
 
 /**
- * A `custom:toc` node wrapping a list of links.
+ * A list of links to `entries`. Each entry is followed by the entries deeper
+ * than it, which become a nested list inside its item.
+ * @param {Entry[]} entries
+ * @returns {Node}
+ */
+function linkList(entries) {
+  /** @type {Node[]} */
+  const items = []
+  let i = 0
+  while (i < entries.length) {
+    const entry = entries[i]
+    let end = i + 1
+    while (end < entries.length && entries[end].level > entry.level) end++
+    /** @type {Node[]} */
+    const children = [
+      {
+        type: 'paragraph',
+        children: [{ type: 'link', url: `#${entry.id}`, children: [{ type: 'text', value: entry.title }] }],
+      },
+    ]
+    if (end > i + 1) children.push(linkList(entries.slice(i + 1, end)))
+    items.push({ type: 'list_item', children })
+    i = end
+  }
+  return { type: 'list', children: items }
+}
+
+/**
+ * A `custom:toc` node wrapping a (nested) list of links.
  * @param {Entry[]} entries
  * @returns {Node}
  */
 function tocNode(entries) {
-  return {
-    type: 'custom',
-    kind: 'toc',
-    children: [
-      {
-        type: 'list',
-        children: entries.map((entry) => ({
-          type: 'list_item',
-          children: [
-            {
-              type: 'paragraph',
-              children: [{ type: 'link', url: `#${entry.id}`, children: [{ type: 'text', value: entry.title }] }],
-            },
-          ],
-        })),
-      },
-    ],
-  }
+  return { type: 'custom', kind: 'toc', children: [linkList(entries)] }
 }
 
 const plugin = definePlugin({

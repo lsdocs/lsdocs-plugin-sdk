@@ -40,7 +40,7 @@ builtin = "parser-markdown"
 
 [[plugins]]
 name = "toc"
-options = {{ depth = 2 }}
+options = {{ depth = 3 }}
 {toc_plugin}
 
 [[plugins]]

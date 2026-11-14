@@ -33,7 +33,7 @@ function config(tocPlugin) {
     '',
     '[[plugins]]',
     'name = "toc"',
-    'options = { depth = 2 }',
+    'options = { depth = 3 }',
     tocPlugin,
     '',
     '[[plugins]]',

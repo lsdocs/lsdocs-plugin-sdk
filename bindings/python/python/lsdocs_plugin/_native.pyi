@@ -10,7 +10,8 @@ class Context:
 
     @property
     def site(self) -> dict[str, Any]:
-        """The site being built: ``title``, ``base_url``, ``root``."""
+        """The site being built: ``title``, ``base_url``, ``root`` and ``files``
+        (every source file, relative to the source directory)."""
 
     @property
     def options(self) -> Any:

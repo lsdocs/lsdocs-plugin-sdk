@@ -517,6 +517,74 @@ impl EventSink for PeerSink {
 }
 
 // ---------------------------------------------------------------------------
+// Testing
+// ---------------------------------------------------------------------------
+
+/// Helpers for testing plugins without a host.
+pub mod testing {
+    use super::*;
+    use lsdocs_protocol::doctree::Document;
+
+    struct Discard;
+
+    impl EventSink for Discard {
+        fn send(&self, _event: Event) -> BoxFuture<'_, ()> {
+            Box::pin(async {})
+        }
+    }
+
+    /// A context for `initialize` whose events (logs, progress, notified
+    /// diagnostics) are dropped.
+    pub fn context(initialize: &InitializeParams) -> Context {
+        Context::new(Arc::new(Discard), initialize)
+    }
+
+    /// Runs `plugin`'s transformer over `documents` the way the host does:
+    /// the collect pass over every document (if it collects), then the
+    /// apply pass with everything collected. Returns each transformed
+    /// document with the diagnostics its apply pass reported. Unlike the
+    /// host, every document is passed, whatever node kinds it contains.
+    pub async fn run_transform(
+        plugin: &Plugin,
+        initialize: &InitializeParams,
+        documents: Vec<Document>,
+    ) -> PluginResult<Vec<(Document, Vec<Diagnostic>)>> {
+        let ctx = context(initialize);
+        let collects = plugin.capabilities().transform.is_some_and(|t| t.collect);
+        let mut collected = Value::Null;
+        if collects {
+            let mut data = serde_json::Map::new();
+            for document in &documents {
+                let result = plugin
+                    .collect(
+                        TransformCollectParams {
+                            document: document.clone(),
+                        },
+                        &ctx,
+                    )
+                    .await?;
+                data.insert(document.source.clone(), result.data);
+            }
+            collected = Value::Object(data);
+        }
+        let mut out = Vec::with_capacity(documents.len());
+        for document in documents {
+            let result = plugin
+                .apply(
+                    TransformApplyParams {
+                        document,
+                        collected: collected.clone(),
+                    },
+                    &ctx,
+                )
+                .await?;
+            out.push((result.document, result.diagnostics));
+        }
+        Ok(out)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Serving
 // ---------------------------------------------------------------------------
 
@@ -708,8 +776,7 @@ mod tests {
             },
             site: SiteInfo {
                 title: Some("Docs".into()),
-                base_url: None,
-                root: None,
+                ..SiteInfo::default()
             },
             options: Value::Null,
         }
