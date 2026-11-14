@@ -28,6 +28,11 @@ runtime = "python"
 module = "shout"
 ```
 
+Handlers may be `async def`. Coroutines run on one event loop shared by all
+calls, so loop-bound objects (client sessions, locks) can be reused across
+documents. Raise `max_concurrency` (`Plugin("x", max_concurrency=8)`) to let
+async handlers overlap.
+
 `lsdocs_plugin.testing` runs handlers in-process for unit tests.
 `examples/transform_toc.py` is a full plugin: a Python port of the
 first-party table-of-contents transformer.

@@ -90,3 +90,31 @@ def test_python_port_matches_rust(tmp_path):
         env={"LSDOCS_PYTHON": sys.executable, "PYTHONPATH": str(PORT.parent)},
     )
     assert module == rust
+
+
+ASYNC_PLUGIN = '''
+import asyncio
+from lsdocs_plugin import Plugin
+
+plugin = Plugin("shout-async", "0.1.0")
+
+@plugin.transform(nodes=["text"])
+async def shout(params, ctx):
+    await asyncio.sleep(0)
+    def walk(nodes):
+        for node in nodes:
+            if node["type"] == "text":
+                node["value"] = node["value"].upper()
+            walk(node.get("children", []))
+    walk(params["document"]["children"])
+    return params["document"]
+
+plugin.serve()
+'''
+
+
+def test_async_plugin_builds_and_exits(tmp_path):
+    script = tmp_path / "shout_async.py"
+    script.write_text(ASYNC_PLUGIN, encoding="utf-8")
+    site = build(tmp_path, "async", f"command = [{toml_str(sys.executable)}, {toml_str(script)}]")
+    assert b"GETTING STARTED" in site["guide/getting-started.html"]

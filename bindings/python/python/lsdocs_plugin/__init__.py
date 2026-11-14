@@ -24,7 +24,15 @@ document; ``collect`` may return any value (taken as ``data``); ``render`` may
 return a ``str`` or ``bytes`` (taken as ``output``, with ``extension`` set to
 the format).
 
-Handlers run one at a time. The protocol itself (framing, handshake,
+Handlers may be ``async def``: coroutines run on one event loop shared by
+all calls, so loop-bound objects (client sessions, locks) can be reused::
+
+    @plugin.transform(nodes=["link"])
+    async def check_links(params, ctx):
+        async with session.head(url) as response: ...
+
+Handlers run one at a time unless ``max_concurrency`` is raised, which lets
+async handlers overlap. The protocol itself (framing, handshake,
 cancellation, shutdown) is handled in Rust.
 """
 
@@ -34,13 +42,13 @@ import sys
 from collections.abc import Callable, Iterable
 from typing import Any, TypeVar
 
-from . import _native
+from . import _aio, _native
 from ._native import PROTOCOL_VERSION, Context
 
 __all__ = ["PROTOCOL_VERSION", "Context", "Handler", "Plugin"]
 
 Handler = Callable[[dict[str, Any], Context], Any]
-"""A handler: ``(params, ctx) -> result``."""
+"""A handler: ``(params, ctx) -> result``, or an ``async def`` returning it."""
 
 F = TypeVar("F", bound=Handler)
 
@@ -58,7 +66,7 @@ class Plugin:
         exts = list(extensions)
 
         def register(func: F) -> F:
-            self._native.set_parse(exts, func)
+            self._native.set_parse(exts, _aio.adapt(func))
             return func
 
         return register
@@ -69,7 +77,7 @@ class Plugin:
         ``@plugin.collect()``."""
 
         def register(f: F) -> F:
-            self._native.set_collect(f)
+            self._native.set_collect(_aio.adapt(f))
             return f
 
         return register(func) if func is not None else register
@@ -81,7 +89,7 @@ class Plugin:
         kinds = list(nodes)
 
         def register(func: F) -> F:
-            self._native.set_apply(kinds, func)
+            self._native.set_apply(kinds, _aio.adapt(func))
             return func
 
         return register
@@ -91,7 +99,7 @@ class Plugin:
         fmts = list(formats)
 
         def register(func: F) -> F:
-            self._native.set_render(fmts, func)
+            self._native.set_render(fmts, _aio.adapt(func))
             return func
 
         return register
