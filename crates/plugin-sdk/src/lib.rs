@@ -43,6 +43,7 @@ use std::pin::Pin;
 use std::process::ExitCode;
 use std::sync::{Arc, OnceLock};
 
+pub mod links;
 pub use lsdocs_protocol as protocol;
 pub use lsdocs_protocol::doctree;
 use lsdocs_protocol::doctree::Value;
