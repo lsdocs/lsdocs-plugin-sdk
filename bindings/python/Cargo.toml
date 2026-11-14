@@ -1,0 +1,13 @@
+[package]
+name = "lsdocs-python"
+description = "Python bindings (pyo3) for writing lsdocs plugins. Stub until Phase 5."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lsdocs-sdk-dynamic.workspace = true
