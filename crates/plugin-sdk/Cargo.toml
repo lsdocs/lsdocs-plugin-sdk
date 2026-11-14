@@ -11,5 +11,10 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-lsdocs-rpc.workspace = true
 lsdocs-protocol.workspace = true
+lsdocs-rpc.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt", "time", "net", "io-util"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
