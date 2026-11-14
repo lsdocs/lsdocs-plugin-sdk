@@ -38,6 +38,7 @@ function plainText(nodes) {
   return nodes
     .map((node) => {
       if (node.type === 'text' || node.type === 'inline_code') return node.value
+      if (node.type === 'image') return node.alt ?? ''
       return 'children' in node ? plainText(node.children) : ''
     })
     .join('')

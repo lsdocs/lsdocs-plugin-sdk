@@ -49,9 +49,9 @@ use lsdocs_protocol::doctree::Value;
 use lsdocs_protocol::{
     Capabilities, Diagnostic, DiagnosticsParams, InitializeParams, InitializeResult, LogLevel,
     LogParams, PROTOCOL_VERSION, ParseCapability, ParseParams, ParseResult, ProgramInfo,
-    ProgressParams, RenderCapability, RenderParams, RenderResult, SiteInfo, TransformApplyParams,
-    TransformApplyResult, TransformCapability, TransformCollectParams, TransformCollectResult,
-    notification, request,
+    ProgressParams, RenderCapability, RenderParams, RenderResult, RenderSiteParams,
+    RenderSiteResult, SiteInfo, TransformApplyParams, TransformApplyResult, TransformCapability,
+    TransformCollectParams, TransformCollectResult, notification, request,
 };
 /// Tracing target for wire logs; enable it at TRACE level to log every
 /// protocol message.
@@ -157,12 +157,27 @@ pub trait Renderer: Send + Sync + 'static {
     /// Output formats produced, e.g. `["html"]`.
     fn formats(&self) -> Vec<String>;
 
+    /// Whether to handle `render/site`. If true,
+    /// [`Renderer::render_site`] is called once after every document is
+    /// rendered.
+    const SITE: bool = false;
+
     /// Renders one document.
     fn render(
         &self,
         params: RenderParams,
         ctx: &Context,
     ) -> impl Future<Output = PluginResult<RenderResult>> + Send;
+
+    /// Produces site-wide files, such as a sitemap, from the list of
+    /// rendered pages. Only called if [`Renderer::SITE`] is true.
+    fn render_site(
+        &self,
+        _params: RenderSiteParams,
+        _ctx: &Context,
+    ) -> impl Future<Output = PluginResult<RenderSiteResult>> + Send {
+        async { Ok(RenderSiteResult::default()) }
+    }
 }
 
 // Object-safe versions of the traits, so a Plugin can hold any of them.
@@ -229,16 +244,25 @@ impl<T: Transformer> DynTransformer for T {
 
 trait DynRenderer: Send + Sync {
     fn formats(&self) -> Vec<String>;
+    fn site(&self) -> bool;
     fn render<'a>(
         &'a self,
         params: RenderParams,
         ctx: &'a Context,
     ) -> BoxFuture<'a, PluginResult<RenderResult>>;
+    fn render_site<'a>(
+        &'a self,
+        params: RenderSiteParams,
+        ctx: &'a Context,
+    ) -> BoxFuture<'a, PluginResult<RenderSiteResult>>;
 }
 
 impl<T: Renderer> DynRenderer for T {
     fn formats(&self) -> Vec<String> {
         Renderer::formats(self)
+    }
+    fn site(&self) -> bool {
+        T::SITE
     }
     fn render<'a>(
         &'a self,
@@ -246,6 +270,13 @@ impl<T: Renderer> DynRenderer for T {
         ctx: &'a Context,
     ) -> BoxFuture<'a, PluginResult<RenderResult>> {
         Box::pin(Renderer::render(self, params, ctx))
+    }
+    fn render_site<'a>(
+        &'a self,
+        params: RenderSiteParams,
+        ctx: &'a Context,
+    ) -> BoxFuture<'a, PluginResult<RenderSiteResult>> {
+        Box::pin(Renderer::render_site(self, params, ctx))
     }
 }
 
@@ -331,6 +362,7 @@ impl Plugin {
             }),
             render: self.renderer.as_ref().map(|r| RenderCapability {
                 formats: r.formats(),
+                site: r.site(),
             }),
             max_concurrency: self.max_concurrency,
         }
@@ -387,6 +419,20 @@ impl Plugin {
             .as_ref()
             .ok_or_else(|| missing("renderer"))?
             .render(params, ctx)
+            .await
+    }
+
+    /// Produces site-wide files after rendering. Fails if the plugin has no
+    /// renderer.
+    pub async fn render_site(
+        &self,
+        params: RenderSiteParams,
+        ctx: &Context,
+    ) -> PluginResult<RenderSiteResult> {
+        self.renderer
+            .as_ref()
+            .ok_or_else(|| missing("renderer"))?
+            .render_site(params, ctx)
             .await
     }
 }
@@ -514,6 +560,27 @@ impl EventSink for PeerSink {
             };
         })
     }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// A relative URL from the document `from` to the file `to`, both given
+/// relative to the source directory with `/` separators: e.g. from
+/// `guide/a.md` to `index.md` is `../index.md`.
+pub fn relative_path(from: &str, to: &str) -> String {
+    let from_parts: Vec<&str> = from.split('/').collect();
+    let from_dir = &from_parts[..from_parts.len() - 1];
+    let to_parts: Vec<&str> = to.split('/').collect();
+    let common = from_dir
+        .iter()
+        .zip(&to_parts)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let mut out = "../".repeat(from_dir.len() - common);
+    out.push_str(&to_parts[common..].join("/"));
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -697,6 +764,7 @@ fn router(plugin: Arc<Plugin>) -> Router {
     }
     if plugin.renderer.is_some() {
         route!(request::Render, render);
+        route!(request::RenderSite, render_site);
     }
     router
 }
@@ -704,6 +772,15 @@ fn router(plugin: Arc<Plugin>) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn relative_paths() {
+        assert_eq!(relative_path("index.md", "guide/a.md"), "guide/a.md");
+        assert_eq!(relative_path("guide/a.md", "index.md"), "../index.md");
+        assert_eq!(relative_path("guide/a.md", "guide/b.md"), "b.md");
+        assert_eq!(relative_path("guide/x/a.md", "ref/b.md"), "../../ref/b.md");
+        assert_eq!(relative_path("a.md", "a.md"), "a.md");
+    }
     use lsdocs_protocol::doctree::{Document, text};
     use lsdocs_rpc::Error;
     use std::sync::Mutex;

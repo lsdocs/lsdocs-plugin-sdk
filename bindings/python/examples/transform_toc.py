@@ -31,6 +31,8 @@ def plain_text(nodes: list[Node]) -> str:
     for node in nodes:
         if node["type"] in ("text", "inline_code"):
             out.append(node["value"])
+        elif node["type"] == "image":
+            out.append(node.get("alt", ""))
         else:
             out.append(plain_text(node.get("children", [])))
     return "".join(out)
