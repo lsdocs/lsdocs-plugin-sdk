@@ -123,6 +123,11 @@ class Plugin {
       if (!Array.isArray(formats)) throw new TypeError('render.formats is required')
       this.native.setRender(formats, wrap(handler))
     }
+    if (definition.renderSite) {
+      if (!definition.render) throw new TypeError('renderSite needs render')
+      const [handler] = split(definition.renderSite, 'renderSite')
+      this.native.setRenderSite(wrap(handler))
+    }
   }
 
   /** The capabilities reported to the host. */

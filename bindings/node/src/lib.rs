@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 
 use lsdocs_plugin_sdk::protocol::{
     Diagnostic, InitializeParams, LogLevel, PROTOCOL_VERSION as VERSION, ParseParams, RenderParams,
-    SiteInfo, TransformApplyParams, TransformCollectParams,
+    RenderSiteParams, SiteInfo, TransformApplyParams, TransformCollectParams,
 };
 use lsdocs_plugin_sdk::{BoxFuture, Context, Event, EventSink, PluginError};
 use lsdocs_sdk_dynamic::{DynamicPlugin, Handler, Value};
@@ -184,6 +184,16 @@ impl NativePlugin {
         Ok(())
     }
 
+    /// Sets the `render/site` handler, which returns site-wide files.
+    #[napi]
+    pub fn set_render_site(
+        &mut self,
+        handler: Function<'_, String, Promise<String>>,
+    ) -> Result<()> {
+        self.inner.render_site = Some(build(handler)?);
+        Ok(())
+    }
+
     /// The capabilities reported to the host, as JSON.
     #[napi]
     pub fn capabilities(&self) -> String {
@@ -289,6 +299,10 @@ pub fn call<'env>(
             },
             "render" => match decode::<RenderParams>("render", params) {
                 Ok(p) => to_json(plugin.render(p, &ctx).await),
+                Err(e) => Err(e),
+            },
+            "render/site" => match decode::<RenderSiteParams>("render/site", params) {
+                Ok(p) => to_json(plugin.render_site(p, &ctx).await),
                 Err(e) => Err(e),
             },
             other => Err(format!("unknown method {other:?}")),

@@ -28,7 +28,8 @@ def call(
     options: Any = None,
 ) -> Result:
     """Calls ``method`` (``"parse"``, ``"transform/collect"``,
-    ``"transform/apply"``, ``"render"`` or ``"initialize"``) with ``params``."""
+    ``"transform/apply"``, ``"render"``, ``"render/site"`` or
+    ``"initialize"``) with ``params``."""
     return _native.call(plugin._native, method, params, site, options)
 
 
@@ -50,3 +51,11 @@ def apply(plugin: Plugin, document: dict[str, Any], collected: Any = None, **kwa
 def render(plugin: Plugin, document: dict[str, Any], format: str = "html", **kwargs: Any) -> Result:
     """Renders ``document`` to ``format``. ``output`` is returned as bytes."""
     return call(plugin, "render", {"document": document, "format": format}, **kwargs)
+
+
+def render_site(
+    plugin: Plugin, pages: list[dict[str, Any]], format: str = "html", **kwargs: Any
+) -> Result:
+    """Runs ``render/site`` for ``pages`` (dicts with ``source``, ``path``
+    and optional ``metadata``). Each file's ``output`` is returned as bytes."""
+    return call(plugin, "render/site", {"format": format, "pages": pages}, **kwargs)

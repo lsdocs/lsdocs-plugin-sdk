@@ -91,6 +91,30 @@ def test_render_strings_and_bytes():
     assert result == {"output": b"hi\x00\xff", "extension": "dat"}
 
 
+def test_render_site_returns_site_files():
+    plugin = make_plugin()
+    assert "site" not in plugin.capabilities["render"]
+
+    @plugin.render_site
+    async def site_files(params, ctx):
+        paths = [page["path"] for page in params["pages"]]
+        # A bare list of files; outputs may be str or bytes.
+        return [
+            {"path": "index.txt", "output": "\n".join(paths)},
+            {"path": "raw.bin", "output": b"\x00\xff"},
+        ]
+
+    assert plugin.capabilities["render"]["site"] is True
+    pages = [{"source": "a.txt", "path": "a.txt"}, {"source": "b.txt", "path": "b.txt"}]
+    result, _ = testing.render_site(plugin, pages, "txt")
+    assert result == {
+        "files": [
+            {"path": "index.txt", "output": b"a.txt\nb.txt"},
+            {"path": "raw.bin", "output": b"\x00\xff"},
+        ]
+    }
+
+
 def test_context_options_progress_and_diagnostics():
     plugin = Plugin("ctx")
 

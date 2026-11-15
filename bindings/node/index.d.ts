@@ -130,6 +130,26 @@ export interface RenderResult {
   extension?: string
   diagnostics?: Diagnostic[]
 }
+/** A page written by the render phase. */
+export interface RenderedPage {
+  source: string
+  /** Output path, relative to the output directory. */
+  path: string
+  metadata?: Record<string, unknown>
+}
+export interface RenderSiteParams {
+  format: string
+  pages: RenderedPage[]
+}
+/** A site-wide file to write, e.g. a sitemap. */
+export interface OutputFile {
+  path: string
+  output: string | Uint8Array
+}
+export interface RenderSiteResult {
+  files?: OutputFile[]
+  diagnostics?: Diagnostic[]
+}
 
 type MaybePromise<T> = T | Promise<T>
 type Handler<P, R> = (params: P, ctx: Context) => MaybePromise<R>
@@ -151,13 +171,21 @@ export interface PluginDefinition {
     formats: string[]
     handler: Handler<RenderParams, RenderResult | string | Uint8Array>
   }
+  /**
+   * Called once after every page is rendered; returns site-wide files (or
+   * just the list of them). Needs `render`.
+   */
+  renderSite?:
+    | Handler<RenderSiteParams, RenderSiteResult | OutputFile[]>
+    | { handler: Handler<RenderSiteParams, RenderSiteResult | OutputFile[]> }
 }
 
 export interface Capabilities {
   parse?: { extensions: string[] }
   transform?: { nodes?: string[]; collect: boolean }
-  render?: { formats: string[] }
+  render?: { formats: string[]; site?: boolean }
   max_concurrency?: number
+  cache?: string
 }
 
 export declare class Plugin {

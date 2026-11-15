@@ -1,4 +1,4 @@
-import type { Document, Plugin, SiteInfo } from './index'
+import type { Document, Plugin, RenderedPage, SiteInfo } from './index'
 
 export interface CallOptions {
   site?: SiteInfo
@@ -17,7 +17,7 @@ export interface Reply<R = any> {
 
 export declare function call(
   plugin: Plugin,
-  method: 'initialize' | 'parse' | 'transform/collect' | 'transform/apply' | 'render',
+  method: 'initialize' | 'parse' | 'transform/collect' | 'transform/apply' | 'render' | 'render/site',
   params?: unknown,
   options?: CallOptions,
 ): Promise<Reply>
@@ -35,3 +35,9 @@ export declare function render(
   format?: string,
   options?: CallOptions,
 ): Promise<Reply<{ output: Buffer; extension: string }>>
+export declare function renderSite(
+  plugin: Plugin,
+  pages: RenderedPage[],
+  format?: string,
+  options?: CallOptions,
+): Promise<Reply<{ files?: Array<{ path: string; output: Buffer }> }>>

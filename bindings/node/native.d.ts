@@ -24,6 +24,8 @@ export declare class NativePlugin {
   setApply(nodes: Array<string>, handler: (arg: string) => Promise<string>): void
   /** Sets the renderer for these output formats. */
   setRender(formats: Array<string>, handler: (arg: string) => Promise<string>): void
+  /** Sets the `render/site` handler, which returns site-wide files. */
+  setRenderSite(handler: (arg: string) => Promise<string>): void
   /** The capabilities reported to the host, as JSON. */
   capabilities(): string
 }

@@ -16,8 +16,8 @@
 use std::sync::{Arc, Mutex};
 
 use lsdocs_plugin_sdk::protocol::{
-    Diagnostic, InitializeParams, LogLevel, PROTOCOL_VERSION, ParseParams, RenderParams, SiteInfo,
-    TransformApplyParams, TransformCollectParams,
+    Diagnostic, InitializeParams, LogLevel, PROTOCOL_VERSION, ParseParams, RenderParams,
+    RenderSiteParams, SiteInfo, TransformApplyParams, TransformCollectParams,
 };
 use lsdocs_plugin_sdk::{BoxFuture, Context, Event, EventSink};
 use lsdocs_sdk_dynamic::{DynamicPlugin, Handler, Value};
@@ -160,6 +160,10 @@ impl NativePlugin {
 
     fn set_render(&mut self, formats: Vec<String>, func: Py<PyAny>) {
         self.inner.render = Some((formats, py_handler(func)));
+    }
+
+    fn set_render_site(&mut self, func: Py<PyAny>) {
+        self.inner.render_site = Some(py_handler(func));
     }
 
     /// The capabilities the plugin will report to the host.
@@ -380,6 +384,11 @@ fn call<'py>(
                         .render(decode::<RenderParams>("render", params)?, &ctx)
                         .await,
                 ),
+                "render/site" => to_json(
+                    plugin
+                        .render_site(decode::<RenderSiteParams>("render/site", params)?, &ctx)
+                        .await,
+                ),
                 other => Err(format!("unknown method {other:?}")),
             }
         })
@@ -387,15 +396,32 @@ fn call<'py>(
     let result = result.map_err(PyRuntimeError::new_err)?;
     let result_py = to_py(py, &result)?;
     // Give render output back as bytes.
+    let as_bytes = |dict: &Bound<'_, PyDict>, value: &Value| -> PyResult<()> {
+        if let Some(Value::Array(bytes)) = value.get("output") {
+            let bytes: Vec<u8> = bytes
+                .iter()
+                .filter_map(|b| b.as_u64().map(|b| b as u8))
+                .collect();
+            dict.set_item("output", PyBytes::new(py, &bytes))?;
+        }
+        Ok(())
+    };
     if method == "render"
         && let Ok(dict) = result_py.cast::<PyDict>()
-        && let Some(Value::Array(bytes)) = result.get("output")
     {
-        let bytes: Vec<u8> = bytes
-            .iter()
-            .filter_map(|b| b.as_u64().map(|b| b as u8))
-            .collect();
-        dict.set_item("output", PyBytes::new(py, &bytes))?;
+        as_bytes(dict, &result)?;
+    }
+    if method == "render/site"
+        && let Ok(dict) = result_py.cast::<PyDict>()
+        && let Some(files) = dict.get_item("files")?
+        && let Ok(files) = files.cast::<PyList>()
+        && let Some(Value::Array(values)) = result.get("files")
+    {
+        for (file, value) in files.iter().zip(values) {
+            if let Ok(file) = file.cast::<PyDict>() {
+                as_bytes(file, value)?;
+            }
+        }
     }
     let events: Vec<Value> = std::mem::take(&mut *recorder.0.lock().expect("lock"))
         .into_iter()

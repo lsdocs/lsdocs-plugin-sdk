@@ -15,13 +15,17 @@
 //! | parse, apply | the document alone (an object with `children` but no `document`) |
 //! | collect | any value, taken as `data` |
 //! | render | a string, taken as `output`, with `extension` set to the format |
+//! | render/site | a list, taken as `files` |
+//!
+//! Binary output (`output` of `render` and of each `render/site` file) may be
+//! a string or bytes; bindings pass bytes as a list of byte values.
 
 use std::fmt;
 use std::sync::Arc;
 
 use lsdocs_plugin_sdk::protocol::{
-    ParseParams, ParseResult, RenderParams, RenderResult, TransformApplyParams,
-    TransformApplyResult, TransformCollectParams, TransformCollectResult,
+    ParseParams, ParseResult, RenderParams, RenderResult, RenderSiteParams, RenderSiteResult,
+    TransformApplyParams, TransformApplyResult, TransformCollectParams, TransformCollectResult,
 };
 pub use lsdocs_plugin_sdk::{BoxFuture, Context, Event, Plugin};
 use lsdocs_plugin_sdk::{Parser, PluginError, PluginResult, Renderer, Transformer};
@@ -51,6 +55,8 @@ pub struct DynamicPlugin {
     pub apply: Option<(Vec<String>, Handler)>,
     /// Output formats and the `render` handler.
     pub render: Option<(Vec<String>, Handler)>,
+    /// The `render/site` handler; only used with `render`.
+    pub render_site: Option<Handler>,
 }
 
 impl fmt::Debug for DynamicPlugin {
@@ -62,6 +68,7 @@ impl fmt::Debug for DynamicPlugin {
             .field("collect", &self.collect.is_some())
             .field("apply", &self.apply.as_ref().map(|(n, _)| n))
             .field("render", &self.render.as_ref().map(|(f, _)| f))
+            .field("render_site", &self.render_site.is_some())
             .finish()
     }
 }
@@ -94,7 +101,11 @@ impl DynamicPlugin {
             };
         }
         if let Some((formats, handler)) = self.render {
-            plugin = plugin.renderer(DynRenderer { formats, handler });
+            let renderer = DynRenderer { formats, handler };
+            plugin = match self.render_site {
+                Some(site) => plugin.renderer(SiteRenderer(renderer, site)),
+                None => plugin.renderer(renderer),
+            };
         }
         plugin
     }
@@ -253,6 +264,35 @@ impl Renderer for DynRenderer {
     }
 }
 
+/// A renderer that also handles `render/site`. `Renderer::SITE` is a
+/// constant, so it needs its own type, like [`Collecting`].
+struct SiteRenderer(DynRenderer, Handler);
+
+impl Renderer for SiteRenderer {
+    const SITE: bool = true;
+
+    fn formats(&self) -> Vec<String> {
+        self.0.formats()
+    }
+
+    async fn render(&self, params: RenderParams, ctx: &Context) -> PluginResult<RenderResult> {
+        self.0.render(params, ctx).await
+    }
+
+    async fn render_site(
+        &self,
+        params: RenderSiteParams,
+        ctx: &Context,
+    ) -> PluginResult<RenderSiteResult> {
+        call(&self.1, "render/site", &params, ctx, |v| match v {
+            Value::Array(files) => serde_json::json!({ "files": files }),
+            Value::Null => serde_json::json!({}),
+            other => other,
+        })
+        .await
+    }
+}
+
 /// Builds a [`Handler`] from a synchronous closure. Useful for tests and
 /// for bindings whose calls are synchronous.
 pub fn handler<F>(f: F) -> Handler
@@ -335,6 +375,7 @@ mod tests {
                     )))
                 }),
             )),
+            render_site: None,
         }
     }
 
@@ -360,6 +401,43 @@ mod tests {
                 .unwrap()
                 .collect
         );
+    }
+
+    #[tokio::test]
+    async fn render_site_handlers() {
+        use lsdocs_plugin_sdk::protocol::RenderedPage;
+        let plugin = DynamicPlugin {
+            render_site: Some(handler(|params, _| {
+                let count = params["pages"].as_array().map_or(0, Vec::len);
+                // A bare list of files; one as text, one as bytes.
+                Ok(json!([
+                    {"path": "pages.txt", "output": format!("{count} pages")},
+                    {"path": "raw.bin", "output": [0, 255]},
+                ]))
+            })),
+            ..sample()
+        };
+        let plugin = plugin.into_plugin();
+        assert!(plugin.capabilities().render.unwrap().site);
+        assert!(!sample().into_plugin().capabilities().render.unwrap().site);
+        let result = plugin
+            .render_site(
+                RenderSiteParams {
+                    format: "txt".into(),
+                    pages: vec![RenderedPage {
+                        source: "a.txt".into(),
+                        path: "a.txt".into(),
+                        ..RenderedPage::default()
+                    }],
+                },
+                &ctx(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.files.len(), 2);
+        assert_eq!(result.files[0].path, "pages.txt");
+        assert_eq!(result.files[0].output, b"1 pages");
+        assert_eq!(result.files[1].output, [0, 255]);
     }
 
     #[tokio::test]

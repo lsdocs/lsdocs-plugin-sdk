@@ -22,7 +22,7 @@ and a :class:`Context`, and returns the result::
 Shorthand results: ``parse`` and ``transform`` handlers may return just the
 document; ``collect`` may return any value (taken as ``data``); ``render`` may
 return a ``str`` or ``bytes`` (taken as ``output``, with ``extension`` set to
-the format).
+the format); ``render_site`` may return a list of files.
 
 Handlers may be ``async def``: coroutines run on one event loop shared by
 all calls, so loop-bound objects (client sessions, locks) can be reused::
@@ -103,6 +103,16 @@ class Plugin:
             return func
 
         return register
+
+    def render_site(self, func: F) -> F:
+        """Registers the ``render/site`` handler, called once after every
+        page is rendered with the list of rendered pages
+        (``{"format", "pages": [{"source", "path", "metadata"}]}``). It
+        returns site-wide files: ``{"files": [{"path", "output"}]}`` or just
+        the list, each ``output`` a ``str`` or ``bytes``. Only used with a
+        renderer (:meth:`render`)."""
+        self._native.set_render_site(_aio.adapt(func))
+        return func
 
     @property
     def capabilities(self) -> dict[str, Any]:

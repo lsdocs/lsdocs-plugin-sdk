@@ -87,6 +87,34 @@ test('render strings and bytes', async () => {
   assert.deepEqual(bin.result, { output: Buffer.from([104, 105, 0, 255]), extension: 'dat' })
 })
 
+test('renderSite returns site files', async () => {
+  const plugin = definePlugin({
+    name: 'site',
+    render: { formats: ['txt'], handler: () => 'page' },
+    async renderSite(params) {
+      const paths = params.pages.map((page) => page.path)
+      // A bare list of files; outputs may be strings or bytes.
+      return [
+        { path: 'index.txt', output: paths.join('\n') },
+        { path: 'raw.bin', output: new Uint8Array([0, 255]) },
+      ]
+    },
+  })
+  assert.equal(plugin.capabilities.render?.site, true)
+  const pages = [
+    { source: 'a.txt', path: 'a.txt' },
+    { source: 'b.txt', path: 'b.txt' },
+  ]
+  const { result } = await testing.renderSite(plugin, pages, 'txt')
+  assert.deepEqual(result, {
+    files: [
+      { path: 'index.txt', output: Buffer.from('a.txt\nb.txt') },
+      { path: 'raw.bin', output: Buffer.from([0, 255]) },
+    ],
+  })
+  assert.throws(() => definePlugin({ name: 'x', renderSite: () => [] }), /renderSite needs render/)
+})
+
 test('context options, progress and diagnostics', async () => {
   const plugin = definePlugin({
     name: 'ctx',
