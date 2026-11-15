@@ -80,6 +80,8 @@ export interface SiteInfo {
   base_url?: string
   /** Absolute path of the site directory; resolve option paths against it. */
   root?: string
+  /** Absolute path of the source directory, which document sources are relative to. */
+  source_dir?: string
   /** Every source file (documents and assets), relative to the source directory, sorted. */
   files?: string[]
 }
