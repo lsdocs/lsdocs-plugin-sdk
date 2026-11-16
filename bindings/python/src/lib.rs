@@ -344,7 +344,7 @@ fn call<'py>(
         None => Value::Null,
     };
     let init = InitializeParams {
-        protocol_version: PROTOCOL_VERSION,
+        protocol_version: PROTOCOL_VERSION.into(),
         site,
         options,
         ..InitializeParams::default()

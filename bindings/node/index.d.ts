@@ -202,4 +202,4 @@ export declare class Plugin {
 export declare function definePlugin(definition: PluginDefinition): Plugin
 
 /** Protocol version spoken by this package. */
-export declare const PROTOCOL_VERSION: number
+export declare const PROTOCOL_VERSION: string

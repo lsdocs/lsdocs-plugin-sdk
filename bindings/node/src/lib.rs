@@ -31,7 +31,7 @@ use serde::Deserialize;
 
 /// Protocol version spoken by this package.
 #[napi]
-pub const PROTOCOL_VERSION: u32 = VERSION;
+pub const PROTOCOL_VERSION: &str = VERSION;
 
 /// A JS handler, callable from any thread. Weak, so it does not keep the
 /// Node.js event loop alive by itself.
@@ -272,7 +272,7 @@ pub fn call<'env>(
         v => serde_json::from_value(v).map_err(|e| to_napi(format!("invalid site: {e}")))?,
     };
     let init = InitializeParams {
-        protocol_version: VERSION,
+        protocol_version: VERSION.into(),
         site,
         options: parse("options", options)?,
         ..InitializeParams::default()

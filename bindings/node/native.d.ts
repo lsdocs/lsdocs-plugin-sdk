@@ -38,7 +38,7 @@ export declare class NativePlugin {
 export declare function call(plugin: NativePlugin, method: string, params: string, site?: string | undefined | null, options?: string | undefined | null): Promise<string>
 
 /** Protocol version spoken by this package. */
-export declare const PROTOCOL_VERSION: number
+export declare const PROTOCOL_VERSION: string
 
 /**
  * Serves `plugin` over stdio (or `LSDOCS_PIPE`). Resolves when the host is

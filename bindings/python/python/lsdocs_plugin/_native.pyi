@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any
 
-PROTOCOL_VERSION: int
+PROTOCOL_VERSION: str
 
 class Context:
     """What a handler receives alongside its params."""

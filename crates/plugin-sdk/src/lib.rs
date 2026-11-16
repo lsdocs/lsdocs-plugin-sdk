@@ -408,7 +408,7 @@ impl Plugin {
     /// The answer to `initialize`.
     pub fn initialize_result(&self, initialize: &InitializeParams) -> InitializeResult {
         InitializeResult {
-            protocol_version: PROTOCOL_VERSION,
+            protocol_version: PROTOCOL_VERSION.into(),
             plugin: self.info(),
             capabilities: self.capabilities_for(initialize),
         }
@@ -903,7 +903,7 @@ mod tests {
 
     fn init_params() -> InitializeParams {
         InitializeParams {
-            protocol_version: PROTOCOL_VERSION,
+            protocol_version: PROTOCOL_VERSION.into(),
             host: ProgramInfo {
                 name: "test".into(),
                 version: "0".into(),
