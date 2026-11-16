@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 SAMPLE_DOCS = ROOT / "examples" / "sample-site" / "docs"
 PORT = Path(__file__).resolve().parents[1] / "examples" / "transform_toc.py"
 LSDOCS = os.environ.get("LSDOCS_BIN")

@@ -11,7 +11,7 @@ from pathlib import Path
 import msgpack
 import pytest
 
-FIXTURES = Path(__file__).resolve().parents[3] / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[4] / "fixtures"
 FILES = sorted(FIXTURES.rglob("*.msgpack"))
 
 

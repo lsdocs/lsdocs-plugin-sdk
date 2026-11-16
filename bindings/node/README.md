@@ -1,6 +1,6 @@
 # @lsdocs/plugin
 
-Write [lsdocs](../../ROADMAP.md) plugins in JavaScript or TypeScript.
+Write [lsdocs](../../../ROADMAP.md) plugins in JavaScript or TypeScript.
 
 ```js
 const { definePlugin } = require('@lsdocs/plugin')

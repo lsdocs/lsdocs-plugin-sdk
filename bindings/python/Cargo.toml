@@ -1,5 +1,5 @@
 [package]
-name = "lsdocs-python"
+name = "lsdocs-plugin-python"
 description = "Python bindings (pyo3) for writing lsdocs plugins."
 version.workspace = true
 edition.workspace = true

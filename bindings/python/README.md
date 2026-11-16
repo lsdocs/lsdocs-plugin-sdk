@@ -1,6 +1,6 @@
 # lsdocs-plugin
 
-Write [lsdocs](../../ROADMAP.md) plugins in Python.
+Write [lsdocs](../../../ROADMAP.md) plugins in Python.
 
 ```python
 from lsdocs_plugin import Plugin

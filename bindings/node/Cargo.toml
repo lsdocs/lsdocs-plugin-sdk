@@ -1,5 +1,5 @@
 [package]
-name = "lsdocs-node"
+name = "lsdocs-plugin-node"
 description = "Node.js bindings (napi-rs) for writing lsdocs plugins."
 version.workspace = true
 edition.workspace = true
