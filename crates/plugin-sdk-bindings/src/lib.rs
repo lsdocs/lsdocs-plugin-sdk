@@ -451,6 +451,7 @@ mod tests {
                 ParseParams {
                     source: "a.txt".into(),
                     text: "hello".into(),
+                    ..ParseParams::default()
                 },
                 &ctx,
             )
@@ -508,6 +509,7 @@ mod tests {
                 ParseParams {
                     source: "a.txt".into(),
                     text: String::new(),
+                    ..ParseParams::default()
                 },
                 &ctx,
             )

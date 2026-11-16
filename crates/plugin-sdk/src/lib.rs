@@ -51,8 +51,8 @@ use lsdocs_protocol::{
     Capabilities, Diagnostic, DiagnosticsParams, InitializeParams, InitializeResult, LogLevel,
     LogParams, PROTOCOL_VERSION, ParseCapability, ParseParams, ParseResult, ProgramInfo,
     ProgressParams, RenderCapability, RenderParams, RenderResult, RenderSiteParams,
-    RenderSiteResult, SiteInfo, TransformApplyParams, TransformApplyResult, TransformCapability,
-    TransformCollectParams, TransformCollectResult, notification, request,
+    RenderSiteResult, SiteInfo, Syntax, TransformApplyParams, TransformApplyResult,
+    TransformCapability, TransformCollectParams, TransformCollectResult, notification, request,
 };
 /// Tracing target for wire logs; enable it at TRACE level to log every
 /// protocol message.
@@ -295,10 +295,14 @@ pub struct Plugin {
     renderer: Option<Box<dyn DynRenderer>>,
     max_concurrency: Option<u32>,
     cache_key: Option<CacheKey>,
+    syntax: Option<SyntaxFn>,
 }
 
 /// Computes a plugin's cache key from its `initialize` params.
 type CacheKey = Box<dyn Fn(&InitializeParams) -> Option<String> + Send + Sync>;
+
+/// Computes the syntax a plugin declares from its `initialize` params.
+type SyntaxFn = Box<dyn Fn(&InitializeParams) -> Syntax + Send + Sync>;
 
 impl fmt::Debug for Plugin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -321,6 +325,7 @@ impl Plugin {
             renderer: None,
             max_concurrency: None,
             cache_key: None,
+            syntax: None,
         }
     }
 
@@ -367,6 +372,17 @@ impl Plugin {
         self
     }
 
+    /// Declares the directives and roles the plugin handles (see
+    /// [`Capabilities::syntax`]), computed from the `initialize` params so
+    /// they may depend on the plugin's options.
+    pub fn syntax(
+        mut self,
+        syntax: impl Fn(&InitializeParams) -> Syntax + Send + Sync + 'static,
+    ) -> Self {
+        self.syntax = Some(Box::new(syntax));
+        self
+    }
+
     /// The plugin's name and version.
     pub fn info(&self) -> ProgramInfo {
         ProgramInfo {
@@ -376,16 +392,21 @@ impl Plugin {
     }
 
     /// What the plugin can do in the session `initialize` starts: its
-    /// [`Plugin::capabilities`] plus its cache key.
+    /// [`Plugin::capabilities`] plus its cache key and syntax.
     pub fn capabilities_for(&self, initialize: &InitializeParams) -> Capabilities {
         Capabilities {
             cache: self.cache_key.as_ref().and_then(|key| key(initialize)),
+            syntax: self
+                .syntax
+                .as_ref()
+                .map(|syntax| syntax(initialize))
+                .unwrap_or_default(),
             ..self.capabilities()
         }
     }
 
     /// What the plugin can do, derived from the parts it has (without a
-    /// cache key, which depends on the session; see
+    /// cache key or syntax, which depend on the session; see
     /// [`Plugin::capabilities_for`]).
     pub fn capabilities(&self) -> Capabilities {
         Capabilities {
@@ -402,6 +423,7 @@ impl Plugin {
             }),
             max_concurrency: self.max_concurrency,
             cache: None,
+            syntax: Syntax::default(),
         }
     }
 
@@ -1036,6 +1058,7 @@ mod tests {
             .request::<request::Parse>(&ParseParams {
                 source: "a.txt".into(),
                 text: String::new(),
+                ..ParseParams::default()
             })
             .await;
         assert!(
