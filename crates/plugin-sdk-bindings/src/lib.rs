@@ -308,6 +308,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use lsdocs_plugin_sdk::doctree::{Document, text};
     use lsdocs_plugin_sdk::protocol::{InitializeParams, SiteInfo};

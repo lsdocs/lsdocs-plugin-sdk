@@ -5,6 +5,8 @@
 //! filtered run (`cargo test --test suite`) does not; build them first with
 //! `cargo build -p lsdocs-rpc --examples`.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 #[path = "../examples/echo/router.rs"]
 mod router;
 

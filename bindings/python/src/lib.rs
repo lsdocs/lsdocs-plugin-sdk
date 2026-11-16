@@ -13,7 +13,7 @@
 //! (`max_concurrency` defaults to 1), while the protocol runs in Rust with
 //! the GIL released.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use lsdocs_plugin_sdk::protocol::{
     Diagnostic, InitializeParams, LogLevel, PROTOCOL_VERSION, ParseParams, RenderParams,
@@ -169,10 +169,8 @@ impl NativePlugin {
     /// The capabilities the plugin will report to the host.
     fn capabilities<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let caps = self.inner.clone().into_plugin().capabilities();
-        to_py(
-            py,
-            &serde_json::to_value(caps).expect("capabilities serialize"),
-        )
+        let caps = serde_json::to_value(caps).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        to_py(py, &caps)
     }
 }
 
@@ -207,10 +205,9 @@ impl PyContext {
     /// The site being built: `title`, `base_url`, `root`.
     #[getter]
     fn site<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        to_py(
-            py,
-            &serde_json::to_value(self.ctx.site()).expect("site serializes"),
-        )
+        let site = serde_json::to_value(self.ctx.site())
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        to_py(py, &site)
     }
 
     /// The plugin's `options` from the site config (None if absent).
@@ -291,20 +288,23 @@ struct Recorder(Mutex<Vec<Event>>);
 
 impl EventSink for Recorder {
     fn send(&self, event: Event) -> BoxFuture<'_, ()> {
-        self.0.lock().expect("lock").push(event);
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(event);
         Box::pin(async {})
     }
 }
 
-fn event_value(event: Event) -> Value {
+fn event_value(event: Event) -> serde_json::Result<Value> {
     let (kind, value) = match event {
         Event::Log(p) => ("log", serde_json::to_value(p)),
         Event::Progress(p) => ("progress", serde_json::to_value(p)),
         Event::Diagnostics(p) => ("diagnostics", serde_json::to_value(p)),
     };
-    let mut value = value.expect("events serialize");
+    let mut value = value?;
     value["kind"] = Value::String(kind.into());
-    value
+    Ok(value)
 }
 
 fn to_json<T: serde::Serialize>(
@@ -423,10 +423,12 @@ fn call<'py>(
             }
         }
     }
-    let events: Vec<Value> = std::mem::take(&mut *recorder.0.lock().expect("lock"))
-        .into_iter()
-        .map(event_value)
-        .collect();
+    let events: Vec<Value> =
+        std::mem::take(&mut *recorder.0.lock().unwrap_or_else(PoisonError::into_inner))
+            .into_iter()
+            .map(event_value)
+            .collect::<serde_json::Result<_>>()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok((result_py, to_py(py, &Value::Array(events))?))
 }
 

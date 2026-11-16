@@ -124,14 +124,32 @@ pub fn encode_notification<T: Serialize + ?Sized>(
 /// Encodes a successful response whose result is already encoded.
 pub fn encode_response_raw(id: u32, result: &[u8]) -> Bytes {
     let mut buf = BytesMut::with_capacity(8 + result.len());
-    let mut w = (&mut buf).writer();
-    // Writing to a BytesMut cannot fail.
-    rmp::encode::write_array_len(&mut w, 4).expect("in-memory write");
-    rmp::encode::write_pfix(&mut w, RESPONSE).expect("in-memory write");
-    rmp::encode::write_uint(&mut w, id.into()).expect("in-memory write");
-    rmp::encode::write_nil(&mut w).expect("in-memory write");
+    put_response_header(&mut buf, id);
+    buf.put_slice(NIL);
     buf.put_slice(result);
     buf.freeze()
+}
+
+/// Writes `[1, id, ` of a response: the array header, the kind and the id,
+/// encoded by hand since writing to memory cannot fail.
+fn put_response_header(buf: &mut BytesMut, id: u32) {
+    buf.put_u8(0x94); // fixarray of 4
+    buf.put_u8(RESPONSE); // positive fixint
+    match id {
+        0..0x80 => buf.put_u8(id as u8),
+        0x80..=0xff => {
+            buf.put_u8(0xcc);
+            buf.put_u8(id as u8);
+        }
+        0x100..=0xffff => {
+            buf.put_u8(0xcd);
+            buf.put_u16(id as u16);
+        }
+        _ => {
+            buf.put_u8(0xce);
+            buf.put_u32(id);
+        }
+    }
 }
 
 /// Encodes a successful response.
@@ -142,15 +160,18 @@ pub fn encode_response<T: Serialize + ?Sized>(id: u32, result: &T) -> Result<Byt
 /// Encodes an error response.
 pub fn encode_error(id: u32, error: &RpcError) -> Bytes {
     let mut buf = BytesMut::new();
-    let mut w = (&mut buf).writer();
-    rmp::encode::write_array_len(&mut w, 4).expect("in-memory write");
-    rmp::encode::write_pfix(&mut w, RESPONSE).expect("in-memory write");
-    rmp::encode::write_uint(&mut w, id.into()).expect("in-memory write");
-    let error = encode_value(error).expect("RpcError always encodes");
-    buf.put_slice(&error);
+    put_response_header(&mut buf, id);
+    match encode_value(error) {
+        Ok(error) => buf.put_slice(&error),
+        Err(_) => buf.put_slice(UNENCODABLE_ERROR),
+    }
     buf.put_slice(NIL);
     buf.freeze()
 }
+
+/// `{"code": -32603, "message": "unencodable error"}`, sent when an error's
+/// `data` cannot be encoded.
+const UNENCODABLE_ERROR: &[u8] = b"\x82\xa4code\xd1\x80\xa5\xa7message\xb1unencodable error";
 
 /// Decodes one frame.
 pub fn decode(frame: Bytes) -> Result<Message, CodecError> {
@@ -242,6 +263,7 @@ fn slice_rest(frame: &Bytes, rest: &[u8]) -> Bytes {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::panic)]
     use super::*;
     use crate::ErrorCode;
     use lsdocs_protocol::{ProgramInfo, msgpack};
@@ -331,6 +353,17 @@ mod tests {
                 result: Err(error)
             }
         );
+    }
+
+    #[test]
+    fn hand_encoded_parts_match_rmp() {
+        let error: RpcError = rmp_serde::from_slice(UNENCODABLE_ERROR).unwrap();
+        assert_eq!(error, RpcError::internal("unencodable error"));
+        for id in [0, 0x7f, 0x80, 0xff, 0x100, 0xffff, 0x10000, u32::MAX] {
+            let frame = encode_response_raw(id, NIL);
+            let value: serde_json::Value = rmp_serde::from_slice(&frame).unwrap();
+            assert_eq!(value, serde_json::json!([1, id, null, null]));
+        }
     }
 
     #[test]

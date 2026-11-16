@@ -15,7 +15,7 @@
 //! progress, diagnostics) recorded during the call are sent to the host once
 //! the handler finishes.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use lsdocs_plugin_sdk::protocol::{
     Diagnostic, InitializeParams, LogLevel, PROTOCOL_VERSION as VERSION, ParseParams, RenderParams,
@@ -196,9 +196,8 @@ impl NativePlugin {
 
     /// The capabilities reported to the host, as JSON.
     #[napi]
-    pub fn capabilities(&self) -> String {
-        serde_json::to_string(&self.inner.clone().into_plugin().capabilities())
-            .expect("capabilities serialize")
+    pub fn capabilities(&self) -> Result<String> {
+        serde_json::to_string(&self.inner.clone().into_plugin().capabilities()).map_err(to_napi)
     }
 }
 
@@ -216,20 +215,23 @@ struct Recorder(Mutex<Vec<Event>>);
 
 impl EventSink for Recorder {
     fn send(&self, event: Event) -> BoxFuture<'_, ()> {
-        self.0.lock().expect("lock").push(event);
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(event);
         Box::pin(async {})
     }
 }
 
-fn event_value(event: Event) -> Value {
+fn event_value(event: Event) -> serde_json::Result<Value> {
     let (kind, value) = match event {
         Event::Log(p) => ("log", serde_json::to_value(p)),
         Event::Progress(p) => ("progress", serde_json::to_value(p)),
         Event::Diagnostics(p) => ("diagnostics", serde_json::to_value(p)),
     };
-    let mut value = value.expect("events serialize");
+    let mut value = value?;
     value["kind"] = Value::String(kind.into());
-    value
+    Ok(value)
 }
 
 fn to_json<T: serde::Serialize>(
@@ -308,10 +310,12 @@ pub fn call<'env>(
             other => Err(format!("unknown method {other:?}")),
         }
         .map_err(to_napi)?;
-        let events: Vec<Value> = std::mem::take(&mut *recorder.0.lock().expect("lock"))
-            .into_iter()
-            .map(event_value)
-            .collect();
+        let events: Vec<Value> =
+            std::mem::take(&mut *recorder.0.lock().unwrap_or_else(PoisonError::into_inner))
+                .into_iter()
+                .map(event_value)
+                .collect::<serde_json::Result<_>>()
+                .map_err(to_napi)?;
         Ok(serde_json::json!({ "result": result, "events": events }).to_string())
     })
 }

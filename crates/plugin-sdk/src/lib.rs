@@ -41,7 +41,7 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::process::ExitCode;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, PoisonError};
 
 pub mod links;
 pub use lsdocs_protocol as protocol;
@@ -802,7 +802,7 @@ fn router(plugin: Arc<Plugin>) -> Router {
         let collected: Arc<std::sync::Mutex<Arc<Value>>> = Arc::default();
         let store = collected.clone();
         router = router.request::<request::TransformCollected, _, _>(move |params, _| {
-            *store.lock().expect("not poisoned") = Arc::new(params.collected);
+            *store.lock().unwrap_or_else(PoisonError::into_inner) = Arc::new(params.collected);
             async { Ok(()) }
         });
         let plugin = plugin.clone();
@@ -811,7 +811,8 @@ fn router(plugin: Arc<Plugin>) -> Router {
             let plugin = plugin.clone();
             let ctx = session.get().cloned();
             if params.collected.is_null() {
-                params.collected = (**collected.lock().expect("not poisoned")).clone();
+                params.collected =
+                    (**collected.lock().unwrap_or_else(PoisonError::into_inner)).clone();
             }
             async move {
                 let ctx = ctx.ok_or_else(not_initialized)?;
@@ -828,6 +829,7 @@ fn router(plugin: Arc<Plugin>) -> Router {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

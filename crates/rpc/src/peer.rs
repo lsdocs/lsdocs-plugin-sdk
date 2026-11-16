@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -202,7 +202,11 @@ impl Peer {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let frame = message::encode_request(id, method, params)?;
         let (tx, rx) = oneshot::channel();
-        self.inner.pending.lock().expect("lock").insert(id, tx);
+        self.inner
+            .pending
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(id, tx);
         let mut guard = CancelOnDrop {
             peer: self,
             id,
@@ -271,14 +275,20 @@ impl Peer {
             .inner
             .tx
             .lock()
-            .expect("lock")
+            .unwrap_or_else(PoisonError::into_inner)
             .clone()
             .ok_or(Error::Closed)?;
         tx.send(frame).await.map_err(|_| Error::Closed)
     }
 
     fn try_send(&self, frame: Bytes) {
-        if let Some(tx) = self.inner.tx.lock().expect("lock").as_ref() {
+        if let Some(tx) = self
+            .inner
+            .tx
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+        {
             let _ = tx.try_send(frame);
         }
     }
@@ -298,7 +308,7 @@ impl Drop for CancelOnDrop<'_> {
             .inner
             .pending
             .lock()
-            .expect("lock")
+            .unwrap_or_else(PoisonError::into_inner)
             .remove(&self.id)
             .is_some();
         if self.armed
@@ -383,11 +393,21 @@ impl Connection {
 
         // Stop new outgoing requests, then fail the ones still waiting.
         peer.inner.closing.store(true, Ordering::SeqCst);
-        peer.inner.pending.lock().expect("lock").clear();
+        peer.inner
+            .pending
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
         // Let in-flight handlers finish and queue their responses.
         while running.tasks.join_next().await.is_some() {}
         // Closing the queue lets the writer drain it and shut down.
-        drop(peer.inner.tx.lock().expect("lock").take());
+        drop(
+            peer.inner
+                .tx
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take(),
+        );
         let write_result = write_task
             .await
             .map_err(|e| Error::Io(std::io::Error::other(e)))?;
@@ -429,13 +449,10 @@ async fn dispatch(
             let responder = peer.clone();
             let limit = limit.clone();
             let handle = running.tasks.spawn(async move {
+                // The semaphore is never closed; if it were, the limit
+                // would just stop applying.
                 let _permit = match limit {
-                    Some(limit) => Some(
-                        limit
-                            .acquire_owned()
-                            .await
-                            .expect("semaphore is never closed"),
-                    ),
+                    Some(limit) => limit.acquire_owned().await.ok(),
                     None => None,
                 };
                 let frame = match fut.await {
@@ -467,7 +484,12 @@ async fn dispatch(
             None => tracing::debug!(%method, "ignoring notification with no handler"),
         },
         Message::Response { id, result } => {
-            let waiter = peer.inner.pending.lock().expect("lock").remove(&id);
+            let waiter = peer
+                .inner
+                .pending
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&id);
             match waiter {
                 Some(waiter) => {
                     let _ = waiter.send(result);
