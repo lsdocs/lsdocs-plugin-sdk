@@ -52,7 +52,8 @@ use lsdocs_protocol::{
     LogParams, PROTOCOL_VERSION, ParseCapability, ParseParams, ParseResult, ProgramInfo,
     ProgressParams, RenderCapability, RenderParams, RenderResult, RenderSiteParams,
     RenderSiteResult, SiteInfo, Syntax, TransformApplyParams, TransformApplyResult,
-    TransformCapability, TransformCollectParams, TransformCollectResult, notification, request,
+    TransformCapability, TransformCollectParams, TransformCollectResult, TransformCollectedResult,
+    notification, request,
 };
 /// Tracing target for wire logs; enable it at TRACE level to log every
 /// protocol message.
@@ -145,6 +146,19 @@ pub trait Transformer: Send + Sync + 'static {
         async { Ok(TransformCollectResult::default()) }
     }
 
+    /// Generates documents from everything collected (a map from each
+    /// document's source to its collected data), once between the two
+    /// passes. They join the site: the apply pass, later transformers and
+    /// rendering see them like any other document. Only called if
+    /// [`Transformer::COLLECTS`] is true; none by default.
+    fn generate(
+        &self,
+        _collected: &Value,
+        _ctx: &Context,
+    ) -> impl Future<Output = PluginResult<TransformCollectedResult>> + Send {
+        async { Ok(TransformCollectedResult::default()) }
+    }
+
     /// Transforms one document.
     fn apply(
         &self,
@@ -213,6 +227,11 @@ trait DynTransformer: Send + Sync {
         params: TransformCollectParams,
         ctx: &'a Context,
     ) -> BoxFuture<'a, PluginResult<TransformCollectResult>>;
+    fn generate<'a>(
+        &'a self,
+        collected: &'a Value,
+        ctx: &'a Context,
+    ) -> BoxFuture<'a, PluginResult<TransformCollectedResult>>;
     fn apply<'a>(
         &'a self,
         params: TransformApplyParams,
@@ -233,6 +252,13 @@ impl<T: Transformer> DynTransformer for T {
         ctx: &'a Context,
     ) -> BoxFuture<'a, PluginResult<TransformCollectResult>> {
         Box::pin(Transformer::collect(self, params, ctx))
+    }
+    fn generate<'a>(
+        &'a self,
+        collected: &'a Value,
+        ctx: &'a Context,
+    ) -> BoxFuture<'a, PluginResult<TransformCollectedResult>> {
+        Box::pin(Transformer::generate(self, collected, ctx))
     }
     fn apply<'a>(
         &'a self,
@@ -459,6 +485,20 @@ impl Plugin {
             .await
     }
 
+    /// Generates documents from everything collected. Fails if the plugin
+    /// has no transformer.
+    pub async fn generate(
+        &self,
+        collected: &Value,
+        ctx: &Context,
+    ) -> PluginResult<TransformCollectedResult> {
+        self.transformer
+            .as_ref()
+            .ok_or_else(|| missing("transformer"))?
+            .generate(collected, ctx)
+            .await
+    }
+
     /// Transforms a document. Fails if the plugin has no transformer.
     pub async fn apply(
         &self,
@@ -667,13 +707,14 @@ pub mod testing {
 
     /// Runs `plugin`'s transformer over `documents` the way the host does:
     /// the collect pass over every document (if it collects), then the
-    /// apply pass with everything collected. Returns each transformed
+    /// documents it generates, then the apply pass with everything
+    /// collected, generated documents included. Returns each transformed
     /// document with the diagnostics its apply pass reported. Unlike the
     /// host, every document is passed, whatever node kinds it contains.
     pub async fn run_transform(
         plugin: &Plugin,
         initialize: &InitializeParams,
-        documents: Vec<Document>,
+        mut documents: Vec<Document>,
     ) -> PluginResult<Vec<(Document, Vec<Diagnostic>)>> {
         let ctx = context(initialize);
         let collects = plugin.capabilities().transform.is_some_and(|t| t.collect);
@@ -692,6 +733,8 @@ pub mod testing {
                 data.insert(document.source.clone(), result.data);
             }
             collected = Value::Object(data);
+            let generated = plugin.generate(&collected, &ctx).await?;
+            documents.extend(generated.documents);
         }
         let mut out = Vec::with_capacity(documents.len());
         for document in documents {
@@ -823,9 +866,17 @@ fn router(plugin: Arc<Plugin>) -> Router {
         // keep it and fill it into each one.
         let collected: Arc<std::sync::Mutex<Arc<Value>>> = Arc::default();
         let store = collected.clone();
+        let generator = plugin.clone();
+        let generate_session = session.clone();
         router = router.request::<request::TransformCollected, _, _>(move |params, _| {
-            *store.lock().unwrap_or_else(PoisonError::into_inner) = Arc::new(params.collected);
-            async { Ok(()) }
+            let data = Arc::new(params.collected);
+            *store.lock().unwrap_or_else(PoisonError::into_inner) = Arc::clone(&data);
+            let plugin = generator.clone();
+            let ctx = generate_session.get().cloned();
+            async move {
+                let ctx = ctx.ok_or_else(not_initialized)?;
+                plugin.generate(&data, &ctx).await.map_err(plugin_error)
+            }
         });
         let plugin = plugin.clone();
         let session = session.clone();
