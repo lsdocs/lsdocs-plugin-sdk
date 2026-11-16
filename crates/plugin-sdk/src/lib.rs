@@ -20,7 +20,7 @@
 //!         ctx: &Context,
 //!     ) -> PluginResult<TransformApplyResult> {
 //!         ctx.info("shouting").await;
-//!         Ok(TransformApplyResult { document: params.document, diagnostics: vec![] })
+//!         Ok(TransformApplyResult { document: params.document, ..Default::default() })
 //!     }
 //! }
 //!
@@ -51,9 +51,9 @@ use lsdocs_protocol::{
     Capabilities, Diagnostic, DiagnosticsParams, InitializeParams, InitializeResult, LogLevel,
     LogParams, PROTOCOL_VERSION, ParseCapability, ParseParams, ParseResult, ProgramInfo,
     ProgressParams, RenderCapability, RenderParams, RenderResult, RenderSiteParams,
-    RenderSiteResult, SiteInfo, Syntax, TransformApplyParams, TransformApplyResult,
-    TransformCapability, TransformCollectParams, TransformCollectResult, TransformCollectedResult,
-    notification, request,
+    RenderSiteResult, SiteInfo, SiteParseParams, Syntax, TransformApplyParams,
+    TransformApplyResult, TransformCapability, TransformCollectParams, TransformCollectResult,
+    TransformCollectedResult, notification, request,
 };
 /// Tracing target for wire logs; enable it at TRACE level to log every
 /// protocol message.
@@ -555,11 +555,18 @@ pub enum Event {
     Diagnostics(DiagnosticsParams),
 }
 
-/// Where a [`Context`] sends [`Event`]s: the RPC connection, or the host
-/// directly for in-process plugins.
+/// Where a [`Context`] sends [`Event`]s and requests to the host: the RPC
+/// connection, or the host directly for in-process plugins.
 pub trait EventSink: Send + Sync + 'static {
     /// Delivers one event.
     fn send(&self, event: Event) -> BoxFuture<'_, ()>;
+
+    /// Asks the host to parse text with the parser of a file extension
+    /// (`site/parse`). The default says it cannot.
+    fn parse(&self, params: SiteParseParams) -> BoxFuture<'_, Result<ParseResult, String>> {
+        let _ = params;
+        Box::pin(async { Err("parsing through the host is not available here".to_owned()) })
+    }
 }
 
 /// What a plugin operation can see and do besides its params: the site, the
@@ -598,6 +605,26 @@ impl Context {
     /// The plugin's `options` from the site config (null if none).
     pub fn options(&self) -> &Value {
         &self.options
+    }
+
+    /// Parses `text` with the site's parser for files with `extension`
+    /// (`"md"`, `"rst"`, ...), as part of the document `source`: e.g. a doc
+    /// comment. The parser gets the site's syntax extensions; the result is
+    /// not normalized (no generated ids or link targets).
+    pub async fn parse(
+        &self,
+        extension: impl Into<String>,
+        source: impl Into<String>,
+        text: impl Into<String>,
+    ) -> PluginResult<ParseResult> {
+        self.events
+            .parse(SiteParseParams {
+                extension: extension.into(),
+                source: source.into(),
+                text: text.into(),
+            })
+            .await
+            .map_err(PluginError::new)
     }
 
     /// Sends a log line to the host.
@@ -657,6 +684,15 @@ impl EventSink for PeerSink {
                 Event::Progress(p) => self.0.notify::<notification::Progress>(&p).await,
                 Event::Diagnostics(p) => self.0.notify::<notification::Diagnostics>(&p).await,
             };
+        })
+    }
+
+    fn parse(&self, params: SiteParseParams) -> BoxFuture<'_, Result<ParseResult, String>> {
+        Box::pin(async move {
+            self.0
+                .request::<request::SiteParse>(&params)
+                .await
+                .map_err(|e| e.to_string())
         })
     }
 }
@@ -934,6 +970,7 @@ mod tests {
             Ok(TransformCollectResult {
                 data: serde_json::json!(params.document.children.len()),
                 diagnostics: vec![],
+                dependencies: vec![],
             })
         }
 
@@ -952,6 +989,7 @@ mod tests {
             Ok(TransformApplyResult {
                 document,
                 diagnostics: vec![],
+                dependencies: vec![],
             })
         }
     }
