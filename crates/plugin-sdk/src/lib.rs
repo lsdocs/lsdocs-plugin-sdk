@@ -741,6 +741,68 @@ pub mod testing {
         Context::new(Arc::new(Discard), initialize)
     }
 
+    /// Answers `site/parse` with the given parser plugins, as the host
+    /// would; events are dropped.
+    struct WithParsers {
+        parsers: Vec<Plugin>,
+        syntax: Syntax,
+        initialize: InitializeParams,
+    }
+
+    impl EventSink for WithParsers {
+        fn send(&self, _event: Event) -> BoxFuture<'_, ()> {
+            Box::pin(async {})
+        }
+
+        fn parse(&self, params: SiteParseParams) -> BoxFuture<'_, Result<ParseResult, String>> {
+            Box::pin(async move {
+                let parser = self
+                    .parsers
+                    .iter()
+                    .find(|p| {
+                        p.capabilities().parse.is_some_and(|cap| {
+                            cap.extensions
+                                .iter()
+                                .any(|e| e.eq_ignore_ascii_case(&params.extension))
+                        })
+                    })
+                    .ok_or_else(|| format!("no parser takes `.{}` files", params.extension))?;
+                let ctx = context(&self.initialize);
+                parser
+                    .parse(
+                        ParseParams {
+                            source: params.source,
+                            text: params.text,
+                            syntax: self.syntax.clone(),
+                        },
+                        &ctx,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())
+            })
+        }
+    }
+
+    /// A context for `initialize` whose `site/parse` requests go to
+    /// `parsers` (the first taking the extension), with the syntax that
+    /// `plugin` and the parsers declare, as the host would give them.
+    pub fn context_with_parsers(
+        plugin: &Plugin,
+        initialize: &InitializeParams,
+        parsers: Vec<Plugin>,
+    ) -> Context {
+        let mut syntax = plugin.capabilities_for(initialize).syntax;
+        for parser in &parsers {
+            syntax.merge(&parser.capabilities_for(initialize).syntax);
+        }
+        let sink = WithParsers {
+            parsers,
+            syntax,
+            initialize: initialize.clone(),
+        };
+        Context::new(Arc::new(sink), initialize)
+    }
+
     /// Runs `plugin`'s transformer over `documents` the way the host does:
     /// the collect pass over every document (if it collects), then the
     /// documents it generates, then the apply pass with everything
@@ -750,9 +812,19 @@ pub mod testing {
     pub async fn run_transform(
         plugin: &Plugin,
         initialize: &InitializeParams,
+        documents: Vec<Document>,
+    ) -> PluginResult<Vec<(Document, Vec<Diagnostic>)>> {
+        run_transform_in(plugin, &context(initialize), documents).await
+    }
+
+    /// [`run_transform`] with the context `ctx` (e.g. from
+    /// [`context_with_parsers`]).
+    pub async fn run_transform_in(
+        plugin: &Plugin,
+        ctx: &Context,
         mut documents: Vec<Document>,
     ) -> PluginResult<Vec<(Document, Vec<Diagnostic>)>> {
-        let ctx = context(initialize);
+        let ctx = ctx.clone();
         let collects = plugin.capabilities().transform.is_some_and(|t| t.collect);
         let mut collected = Value::Null;
         if collects {
