@@ -8,7 +8,7 @@
  *
  * `result` is normalized to the full protocol shape; `events` lists the log
  * lines, progress and diagnostics the handler sent, each with a `kind`.
- * Render output (and each `render/site` file's output) is returned as a
+ * Render output (and each `render/transform/all` file's output) is returned as a
  * Buffer.
  */
 
@@ -22,15 +22,15 @@ async function call(plugin, method, params = null, { site, options } = {}) {
     if (Array.isArray(value?.output)) value.output = Buffer.from(value.output)
   }
   if (method === 'render') toBuffer(reply.result)
-  if (method === 'render/site') (reply.result.files ?? []).forEach(toBuffer)
+  if (method === 'render/transform/all') (reply.result.files ?? []).forEach(toBuffer)
   return reply
 }
 
 const parse = (plugin, source, text, opts) => call(plugin, 'parse', { source, text }, opts)
-const collect = (plugin, document, opts) => call(plugin, 'transform/collect', { document }, opts)
+const read = (plugin, document, opts) => call(plugin, 'parse/transform/each', { document }, opts)
 const apply = (plugin, document, collected = null, opts) =>
-  call(plugin, 'transform/apply', { document, collected }, opts)
+  call(plugin, 'render/transform/each', { document, collected }, opts)
 const render = (plugin, document, format = 'html', opts) => call(plugin, 'render', { document, format }, opts)
-const renderSite = (plugin, pages, format = 'html', opts) => call(plugin, 'render/site', { format, pages }, opts)
+const renderAll = (plugin, pages, format = 'html', opts) => call(plugin, 'render/transform/all', { format, pages }, opts)
 
-module.exports = { call, parse, collect, apply, render, renderSite }
+module.exports = { call, parse, read, apply, render, renderAll }

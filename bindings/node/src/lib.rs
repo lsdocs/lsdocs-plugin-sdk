@@ -187,7 +187,7 @@ impl NativePlugin {
 
     /// Sets the `render/transform/all` handler, which returns site-wide files.
     #[napi]
-    pub fn set_render_site(
+    pub fn set_render_all(
         &mut self,
         handler: Function<'_, String, Promise<String>>,
     ) -> Result<()> {

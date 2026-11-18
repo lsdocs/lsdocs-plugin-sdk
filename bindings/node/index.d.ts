@@ -107,16 +107,16 @@ export interface ParseResult {
   document: Document
   diagnostics?: Diagnostic[]
 }
-export interface CollectParams {
+export interface ReadParams {
   document: Document
 }
-export interface CollectResult {
+export interface ReadResult {
   data: unknown
   diagnostics?: Diagnostic[]
 }
 export interface ApplyParams {
   document: Document
-  /** Collected data from every document, keyed by source; null without a collect pass. */
+  /** Collected data from every document, keyed by source; null without `parse/transform/each`. */
   collected: Record<string, unknown> | null
 }
 export interface ApplyResult {
@@ -139,16 +139,16 @@ export interface RenderedPage {
   path: string
   metadata?: Record<string, unknown>
 }
-export interface RenderSiteParams {
+export interface RenderAllParams {
   format: string
   pages: RenderedPage[]
 }
-/** A site-wide file to write, e.g. a sitemap. */
+/** A file no single page makes, to write, e.g. a sitemap. */
 export interface OutputFile {
   path: string
   output: string | Uint8Array
 }
-export interface RenderSiteResult {
+export interface RenderAllResult {
   files?: OutputFile[]
   diagnostics?: Diagnostic[]
 }
@@ -163,9 +163,9 @@ export interface PluginDefinition {
   /** Requests handled at once (default 1). */
   maxConcurrency?: number
   parse?: { extensions: string[]; handler: Handler<ParseParams, ParseResult | Document> }
-  collect?:
-    | Handler<CollectParams, CollectResult | unknown>
-    | { handler: Handler<CollectParams, CollectResult | unknown> }
+  read?:
+    | Handler<ReadParams, ReadResult | unknown>
+    | { handler: Handler<ReadParams, ReadResult | unknown> }
   transform?:
     | Handler<ApplyParams, ApplyResult | Document>
     | { nodes?: string[]; handler: Handler<ApplyParams, ApplyResult | Document> }
@@ -174,18 +174,18 @@ export interface PluginDefinition {
     handler: Handler<RenderParams, RenderResult | string | Uint8Array>
   }
   /**
-   * Called once after every page is rendered; returns site-wide files (or
+   * Called once after every page is rendered; returns files no single page makes (or
    * just the list of them). Needs `render`.
    */
-  renderSite?:
-    | Handler<RenderSiteParams, RenderSiteResult | OutputFile[]>
-    | { handler: Handler<RenderSiteParams, RenderSiteResult | OutputFile[]> }
+  renderAll?:
+    | Handler<RenderAllParams, RenderAllResult | OutputFile[]>
+    | { handler: Handler<RenderAllParams, RenderAllResult | OutputFile[]> }
 }
 
 export interface Capabilities {
   parse?: { extensions: string[] }
-  transform?: { nodes?: string[]; collect: boolean }
-  render?: { formats: string[]; site?: boolean }
+  transform?: { nodes?: string[]; each: boolean }
+  render?: { formats: string[]; all?: boolean }
   max_concurrency?: number
   cache?: string
 }

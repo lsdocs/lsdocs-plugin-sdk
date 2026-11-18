@@ -79,7 +79,7 @@ const plugin = definePlugin({
   name: 'transform-toc-js',
   version: '0.1.0',
 
-  collect(params, ctx) {
+  read(params, ctx) {
     const depth = ctx.options?.depth ?? 3
     return { sections: entries(params.document.children, depth) }
   },

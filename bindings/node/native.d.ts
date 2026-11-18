@@ -18,14 +18,14 @@ export declare class NativePlugin {
   constructor(name: string, version: string, maxConcurrency?: number | undefined | null)
   /** Sets the parser for files with these extensions. */
   setParse(extensions: Array<string>, handler: (arg: string) => Promise<string>): void
-  /** Sets the collect-pass handler. */
-  setCollect(handler: (arg: string) => Promise<string>): void
+  /** Sets the `parse/transform/each` handler. */
+  setRead(handler: (arg: string) => Promise<string>): void
   /** Sets the transformer for documents containing these node kinds. */
   setApply(nodes: Array<string>, handler: (arg: string) => Promise<string>): void
   /** Sets the renderer for these output formats. */
   setRender(formats: Array<string>, handler: (arg: string) => Promise<string>): void
-  /** Sets the `render/site` handler, which returns site-wide files. */
-  setRenderSite(handler: (arg: string) => Promise<string>): void
+  /** Sets the `render/transform/all` handler, which returns site-wide files. */
+  setRenderAll(handler: (arg: string) => Promise<string>): void
   /** The capabilities reported to the host, as JSON. */
   capabilities(): string
 }

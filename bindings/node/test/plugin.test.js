@@ -19,7 +19,7 @@ function makePlugin() {
       // Bare document shorthand, without `source`.
       handler: (params) => ({ children: params.text.split('\n').map(text) }),
     },
-    collect: (params) => params.document.children.length,
+    read: (params) => params.document.children.length,
     transform: {
       nodes: ['text'],
       async handler(params, ctx) {
@@ -45,7 +45,7 @@ function makePlugin() {
 test('capabilities follow the handlers', () => {
   assert.deepEqual(makePlugin().capabilities, {
     parse: { extensions: ['txt'] },
-    transform: { nodes: ['text'], collect: true },
+    transform: { nodes: ['text'], each: true },
     render: { formats: ['txt', 'bin'] },
     max_concurrency: 1,
   })
@@ -65,9 +65,9 @@ test('parse shorthand fills in the document', async () => {
   assert.deepEqual(events, [])
 })
 
-test('collect and async apply', async () => {
+test('read and async apply', async () => {
   const plugin = makePlugin()
-  const collected = await testing.collect(plugin, doc('a', 'b'))
+  const collected = await testing.read(plugin, doc('a', 'b'))
   assert.deepEqual(collected.result, { data: 2 })
 
   const { result, events } = await testing.apply(plugin, doc('a', 'b'), { 'a.txt': 2 })
@@ -87,11 +87,11 @@ test('render strings and bytes', async () => {
   assert.deepEqual(bin.result, { output: Buffer.from([104, 105, 0, 255]), extension: 'dat' })
 })
 
-test('renderSite returns site files', async () => {
+test('renderAll returns extra files', async () => {
   const plugin = definePlugin({
     name: 'site',
     render: { formats: ['txt'], handler: () => 'page' },
-    async renderSite(params) {
+    async renderAll(params) {
       const paths = params.pages.map((page) => page.path)
       // A bare list of files; outputs may be strings or bytes.
       return [
@@ -100,19 +100,19 @@ test('renderSite returns site files', async () => {
       ]
     },
   })
-  assert.equal(plugin.capabilities.render?.site, true)
+  assert.equal(plugin.capabilities.render?.all, true)
   const pages = [
     { source: 'a.txt', path: 'a.txt' },
     { source: 'b.txt', path: 'b.txt' },
   ]
-  const { result } = await testing.renderSite(plugin, pages, 'txt')
+  const { result } = await testing.renderAll(plugin, pages, 'txt')
   assert.deepEqual(result, {
     files: [
       { path: 'index.txt', output: Buffer.from('a.txt\nb.txt') },
       { path: 'raw.bin', output: Buffer.from([0, 255]) },
     ],
   })
-  assert.throws(() => definePlugin({ name: 'x', renderSite: () => [] }), /renderSite needs render/)
+  assert.throws(() => definePlugin({ name: 'x', renderAll: () => [] }), /renderAll needs render/)
 })
 
 test('context options, progress and diagnostics', async () => {
@@ -149,7 +149,7 @@ test('errors carry their stack', async () => {
 
 test('invalid results are reported', async () => {
   const plugin = definePlugin({ name: 'bad', transform: () => ({ document: 'not a document' }) })
-  await assert.rejects(testing.apply(plugin, doc()), /invalid transform\/apply result/)
+  await assert.rejects(testing.apply(plugin, doc()), /invalid render\/transform\/each result/)
 })
 
 test('bad definitions are rejected', () => {

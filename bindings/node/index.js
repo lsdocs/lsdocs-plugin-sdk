@@ -23,7 +23,7 @@
  *
  * Handlers get the request params (shaped like the protocol schema) and a
  * context, and return the result, or a Promise of it. Shorthand results:
- * `parse` and `transform` may return just the document, `collect` any value
+ * `parse` and `transform` may return just the document, `read` any value
  * (taken as `data`), `render` a string or bytes (taken as `output`). The
  * protocol itself is handled in Rust.
  */
@@ -110,9 +110,9 @@ class Plugin {
       if (!Array.isArray(extensions)) throw new TypeError('parse.extensions is required')
       this.native.setParse(extensions, wrap(handler))
     }
-    if (definition.collect) {
-      const [handler] = split(definition.collect, 'collect')
-      this.native.setCollect(wrap(handler))
+    if (definition.read) {
+      const [handler] = split(definition.read, 'read')
+      this.native.setRead(wrap(handler))
     }
     if (definition.transform) {
       const [handler, { nodes = [] }] = split(definition.transform, 'transform')
@@ -123,10 +123,10 @@ class Plugin {
       if (!Array.isArray(formats)) throw new TypeError('render.formats is required')
       this.native.setRender(formats, wrap(handler))
     }
-    if (definition.renderSite) {
-      if (!definition.render) throw new TypeError('renderSite needs render')
-      const [handler] = split(definition.renderSite, 'renderSite')
-      this.native.setRenderSite(wrap(handler))
+    if (definition.renderAll) {
+      if (!definition.render) throw new TypeError('renderAll needs render')
+      const [handler] = split(definition.renderAll, 'renderAll')
+      this.native.setRenderAll(wrap(handler))
     }
   }
 
