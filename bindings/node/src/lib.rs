@@ -18,8 +18,9 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use lsdocs_plugin_sdk::protocol::{
-    Diagnostic, InitializeParams, LogLevel, PROTOCOL_VERSION as VERSION, ParseParams, RenderParams,
-    RenderSiteParams, SiteInfo, TransformApplyParams, TransformCollectParams,
+    Diagnostic, InitializeParams, LogLevel, PROTOCOL_VERSION as VERSION, ParseParams,
+    ParseTransformEachParams, RenderParams, RenderTransformAllParams, RenderTransformEachParams,
+    SiteInfo,
 };
 use lsdocs_plugin_sdk::{BoxFuture, Context, Event, EventSink, PluginError};
 use lsdocs_sdk_dynamic::{DynamicPlugin, Handler, Value};
@@ -155,10 +156,10 @@ impl NativePlugin {
         Ok(())
     }
 
-    /// Sets the collect-pass handler.
+    /// Sets the `parse/transform/each` handler.
     #[napi]
-    pub fn set_collect(&mut self, handler: Function<'_, String, Promise<String>>) -> Result<()> {
-        self.inner.collect = Some(build(handler)?);
+    pub fn set_read(&mut self, handler: Function<'_, String, Promise<String>>) -> Result<()> {
+        self.inner.read = Some(build(handler)?);
         Ok(())
     }
 
@@ -184,13 +185,13 @@ impl NativePlugin {
         Ok(())
     }
 
-    /// Sets the `render/site` handler, which returns site-wide files.
+    /// Sets the `render/transform/all` handler, which returns site-wide files.
     #[napi]
     pub fn set_render_site(
         &mut self,
         handler: Function<'_, String, Promise<String>>,
     ) -> Result<()> {
-        self.inner.render_site = Some(build(handler)?);
+        self.inner.render_all = Some(build(handler)?);
         Ok(())
     }
 
@@ -289,24 +290,28 @@ pub fn call<'env>(
                 Ok(p) => to_json(plugin.parse(p, &ctx).await),
                 Err(e) => Err(e),
             },
-            "transform/collect" => {
-                match decode::<TransformCollectParams>("transform/collect", params) {
-                    Ok(p) => to_json(plugin.collect(p, &ctx).await),
+            "parse/transform/each" => {
+                match decode::<ParseTransformEachParams>("parse/transform/each", params) {
+                    Ok(p) => to_json(plugin.read(p, &ctx).await),
                     Err(e) => Err(e),
                 }
             }
-            "transform/apply" => match decode::<TransformApplyParams>("transform/apply", params) {
-                Ok(p) => to_json(plugin.apply(p, &ctx).await),
-                Err(e) => Err(e),
-            },
+            "render/transform/each" => {
+                match decode::<RenderTransformEachParams>("render/transform/each", params) {
+                    Ok(p) => to_json(plugin.apply(p, &ctx).await),
+                    Err(e) => Err(e),
+                }
+            }
             "render" => match decode::<RenderParams>("render", params) {
                 Ok(p) => to_json(plugin.render(p, &ctx).await),
                 Err(e) => Err(e),
             },
-            "render/site" => match decode::<RenderSiteParams>("render/site", params) {
-                Ok(p) => to_json(plugin.render_site(p, &ctx).await),
-                Err(e) => Err(e),
-            },
+            "render/transform/all" => {
+                match decode::<RenderTransformAllParams>("render/transform/all", params) {
+                    Ok(p) => to_json(plugin.render_all(p, &ctx).await),
+                    Err(e) => Err(e),
+                }
+            }
             other => Err(format!("unknown method {other:?}")),
         }
         .map_err(to_napi)?;

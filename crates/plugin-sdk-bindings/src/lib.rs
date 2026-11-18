@@ -13,19 +13,20 @@
 //! | Handler | May return instead of the full result |
 //! |---|---|
 //! | parse, apply | the document alone (an object with `children` but no `document`) |
-//! | collect | any value, taken as `data` |
+//! | read | any value, taken as `data` |
 //! | render | a string, taken as `output`, with `extension` set to the format |
 //! | render/site | a list, taken as `files` |
 //!
-//! Binary output (`output` of `render` and of each `render/site` file) may be
+//! Binary output (`output` of `render` and of each `render/transform/all` file) may be
 //! a string or bytes; bindings pass bytes as a list of byte values.
 
 use std::fmt;
 use std::sync::Arc;
 
 use lsdocs_plugin_sdk::protocol::{
-    ParseParams, ParseResult, RenderParams, RenderResult, RenderSiteParams, RenderSiteResult,
-    TransformApplyParams, TransformApplyResult, TransformCollectParams, TransformCollectResult,
+    ParseParams, ParseResult, ParseTransformEachParams, ParseTransformEachResult, RenderParams,
+    RenderResult, RenderTransformAllParams, RenderTransformAllResult, RenderTransformEachParams,
+    RenderTransformEachResult,
 };
 pub use lsdocs_plugin_sdk::{BoxFuture, Context, Event, Plugin};
 use lsdocs_plugin_sdk::{Parser, PluginError, PluginResult, Renderer, Transformer};
@@ -49,14 +50,14 @@ pub struct DynamicPlugin {
     pub max_concurrency: Option<u32>,
     /// File extensions and the `parse` handler.
     pub parse: Option<(Vec<String>, Handler)>,
-    /// The `transform/collect` handler; only used with `apply`.
-    pub collect: Option<Handler>,
-    /// Node kinds selected and the `transform/apply` handler.
+    /// The `parse/transform/each` handler; only used with `apply`.
+    pub read: Option<Handler>,
+    /// Node kinds selected and the `render/transform/each` handler.
     pub apply: Option<(Vec<String>, Handler)>,
     /// Output formats and the `render` handler.
     pub render: Option<(Vec<String>, Handler)>,
-    /// The `render/site` handler; only used with `render`.
-    pub render_site: Option<Handler>,
+    /// The `render/transform/all` handler; only used with `render`.
+    pub render_all: Option<Handler>,
 }
 
 impl fmt::Debug for DynamicPlugin {
@@ -65,10 +66,10 @@ impl fmt::Debug for DynamicPlugin {
             .field("name", &self.name)
             .field("version", &self.version)
             .field("parse", &self.parse.as_ref().map(|(e, _)| e))
-            .field("collect", &self.collect.is_some())
+            .field("read", &self.read.is_some())
             .field("apply", &self.apply.as_ref().map(|(n, _)| n))
             .field("render", &self.render.as_ref().map(|(f, _)| f))
-            .field("render_site", &self.render_site.is_some())
+            .field("render_all", &self.render_all.is_some())
             .finish()
     }
 }
@@ -87,22 +88,22 @@ impl DynamicPlugin {
             });
         }
         if let Some((nodes, apply)) = self.apply {
-            plugin = match self.collect {
-                Some(collect) => plugin.transformer(Collecting(DynTransformer {
+            plugin = match self.read {
+                Some(read) => plugin.transformer(Collecting(DynTransformer {
                     nodes,
-                    collect: Some(collect),
+                    read: Some(read),
                     apply,
                 })),
                 None => plugin.transformer(DynTransformer {
                     nodes,
-                    collect: None,
+                    read: None,
                     apply,
                 }),
             };
         }
         if let Some((formats, handler)) = self.render {
             let renderer = DynRenderer { formats, handler };
-            plugin = match self.render_site {
+            plugin = match self.render_all {
                 Some(site) => plugin.renderer(SiteRenderer(renderer, site)),
                 None => plugin.renderer(renderer),
             };
@@ -169,32 +170,45 @@ impl Parser for DynParser {
 
 struct DynTransformer {
     nodes: Vec<String>,
-    collect: Option<Handler>,
+    read: Option<Handler>,
     apply: Handler,
 }
 
 impl DynTransformer {
-    async fn do_collect(
+    async fn do_read(
         &self,
-        params: TransformCollectParams,
+        params: ParseTransformEachParams,
         ctx: &Context,
-    ) -> PluginResult<TransformCollectResult> {
-        let Some(handler) = &self.collect else {
-            return Ok(TransformCollectResult::default());
+    ) -> PluginResult<ParseTransformEachResult> {
+        let Some(handler) = &self.read else {
+            return Ok(ParseTransformEachResult::default());
         };
-        call(handler, "transform/collect", &params, ctx, |v| match &v {
-            Value::Object(map) if map.contains_key("data") => v,
-            _ => serde_json::json!({ "data": v }),
-        })
+        call(
+            handler,
+            "parse/transform/each",
+            &params,
+            ctx,
+            |v| match &v {
+                Value::Object(map) if map.contains_key("data") => v,
+                _ => serde_json::json!({ "data": v }),
+            },
+        )
         .await
     }
 
     async fn do_apply(
         &self,
-        params: TransformApplyParams,
+        params: RenderTransformEachParams,
         ctx: &Context,
-    ) -> PluginResult<TransformApplyResult> {
-        call(&self.apply, "transform/apply", &params, ctx, wrap_document).await
+    ) -> PluginResult<RenderTransformEachResult> {
+        call(
+            &self.apply,
+            "render/transform/each",
+            &params,
+            ctx,
+            wrap_document,
+        )
+        .await
     }
 }
 
@@ -205,37 +219,37 @@ impl Transformer for DynTransformer {
 
     async fn apply(
         &self,
-        params: TransformApplyParams,
+        params: RenderTransformEachParams,
         ctx: &Context,
-    ) -> PluginResult<TransformApplyResult> {
+    ) -> PluginResult<RenderTransformEachResult> {
         self.do_apply(params, ctx).await
     }
 }
 
-/// A transformer that runs the collect pass. `Transformer::COLLECTS` is a
-/// constant, so collecting and non-collecting handlers need distinct types.
+/// A transformer that answers `parse/transform/each`. `Transformer::READS` is a
+/// constant, so reading and non-reading handlers need distinct types.
 struct Collecting(DynTransformer);
 
 impl Transformer for Collecting {
-    const COLLECTS: bool = true;
+    const READS: bool = true;
 
     fn nodes(&self) -> Vec<String> {
         self.0.nodes.clone()
     }
 
-    async fn collect(
+    async fn read(
         &self,
-        params: TransformCollectParams,
+        params: ParseTransformEachParams,
         ctx: &Context,
-    ) -> PluginResult<TransformCollectResult> {
-        self.0.do_collect(params, ctx).await
+    ) -> PluginResult<ParseTransformEachResult> {
+        self.0.do_read(params, ctx).await
     }
 
     async fn apply(
         &self,
-        params: TransformApplyParams,
+        params: RenderTransformEachParams,
         ctx: &Context,
-    ) -> PluginResult<TransformApplyResult> {
+    ) -> PluginResult<RenderTransformEachResult> {
         self.0.do_apply(params, ctx).await
     }
 }
@@ -264,12 +278,12 @@ impl Renderer for DynRenderer {
     }
 }
 
-/// A renderer that also handles `render/site`. `Renderer::SITE` is a
+/// A renderer that also handles `render/transform/all`. `Renderer::RENDERS_ALL` is a
 /// constant, so it needs its own type, like [`Collecting`].
 struct SiteRenderer(DynRenderer, Handler);
 
 impl Renderer for SiteRenderer {
-    const SITE: bool = true;
+    const RENDERS_ALL: bool = true;
 
     fn formats(&self) -> Vec<String> {
         self.0.formats()
@@ -279,12 +293,12 @@ impl Renderer for SiteRenderer {
         self.0.render(params, ctx).await
     }
 
-    async fn render_site(
+    async fn render_all(
         &self,
-        params: RenderSiteParams,
+        params: RenderTransformAllParams,
         ctx: &Context,
-    ) -> PluginResult<RenderSiteResult> {
-        call(&self.1, "render/site", &params, ctx, |v| match v {
+    ) -> PluginResult<RenderTransformAllResult> {
+        call(&self.1, "render/transform/all", &params, ctx, |v| match v {
             Value::Array(files) => serde_json::json!({ "files": files }),
             Value::Null => serde_json::json!({}),
             other => other,
@@ -353,7 +367,7 @@ mod tests {
                     Ok(json!({"children": [{"type": "text", "value": params["text"]}]}))
                 }),
             )),
-            collect: Some(handler(|params, _| {
+            read: Some(handler(|params, _| {
                 Ok(json!(
                     params["document"]["children"].as_array().unwrap().len()
                 ))
@@ -376,7 +390,7 @@ mod tests {
                     )))
                 }),
             )),
-            render_site: None,
+            render_all: None,
         }
     }
 
@@ -385,30 +399,23 @@ mod tests {
         let caps = sample().into_plugin().capabilities();
         assert_eq!(caps.parse.unwrap().extensions, ["txt"]);
         let t = caps.transform.unwrap();
-        assert!(t.collect);
+        assert!(t.each);
         assert_eq!(t.nodes, ["text"]);
         assert_eq!(caps.render.unwrap().formats, ["txt"]);
         assert_eq!(caps.max_concurrency, Some(1));
 
-        let no_collect = DynamicPlugin {
-            collect: None,
+        let no_read = DynamicPlugin {
+            read: None,
             ..sample()
         };
-        assert!(
-            !no_collect
-                .into_plugin()
-                .capabilities()
-                .transform
-                .unwrap()
-                .collect
-        );
+        assert!(!no_read.into_plugin().capabilities().transform.unwrap().each);
     }
 
     #[tokio::test]
     async fn render_site_handlers() {
         use lsdocs_plugin_sdk::protocol::RenderedPage;
         let plugin = DynamicPlugin {
-            render_site: Some(handler(|params, _| {
+            render_all: Some(handler(|params, _| {
                 let count = params["pages"].as_array().map_or(0, Vec::len);
                 // A bare list of files; one as text, one as bytes.
                 Ok(json!([
@@ -419,11 +426,11 @@ mod tests {
             ..sample()
         };
         let plugin = plugin.into_plugin();
-        assert!(plugin.capabilities().render.unwrap().site);
-        assert!(!sample().into_plugin().capabilities().render.unwrap().site);
+        assert!(plugin.capabilities().render.unwrap().all);
+        assert!(!sample().into_plugin().capabilities().render.unwrap().all);
         let result = plugin
-            .render_site(
-                RenderSiteParams {
+            .render_all(
+                RenderTransformAllParams {
                     format: "txt".into(),
                     pages: vec![RenderedPage {
                         source: "a.txt".into(),
@@ -461,14 +468,14 @@ mod tests {
         assert_eq!(parsed.document.children, [text("hello")]);
 
         let collected = plugin
-            .collect(TransformCollectParams { document: doc() }, &ctx)
+            .read(ParseTransformEachParams { document: doc() }, &ctx)
             .await
             .unwrap();
         assert_eq!(collected.data, json!(1));
 
         let applied = plugin
             .apply(
-                TransformApplyParams {
+                RenderTransformEachParams {
                     document: doc(),
                     collected: json!({"a.txt": 1}),
                 },

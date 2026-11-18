@@ -16,8 +16,9 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use lsdocs_plugin_sdk::protocol::{
-    Diagnostic, InitializeParams, LogLevel, PROTOCOL_VERSION, ParseParams, RenderParams,
-    RenderSiteParams, SiteInfo, TransformApplyParams, TransformCollectParams,
+    Diagnostic, InitializeParams, LogLevel, PROTOCOL_VERSION, ParseParams,
+    ParseTransformEachParams, RenderParams, RenderTransformAllParams, RenderTransformEachParams,
+    SiteInfo,
 };
 use lsdocs_plugin_sdk::{BoxFuture, Context, Event, EventSink};
 use lsdocs_sdk_dynamic::{DynamicPlugin, Handler, Value};
@@ -150,8 +151,8 @@ impl NativePlugin {
         self.inner.parse = Some((extensions, py_handler(func)));
     }
 
-    fn set_collect(&mut self, func: Py<PyAny>) {
-        self.inner.collect = Some(py_handler(func));
+    fn set_read(&mut self, func: Py<PyAny>) {
+        self.inner.read = Some(py_handler(func));
     }
 
     fn set_apply(&mut self, nodes: Vec<String>, func: Py<PyAny>) {
@@ -163,7 +164,7 @@ impl NativePlugin {
     }
 
     fn set_render_site(&mut self, func: Py<PyAny>) {
-        self.inner.render_site = Some(py_handler(func));
+        self.inner.render_all = Some(py_handler(func));
     }
 
     /// The capabilities the plugin will report to the host.
@@ -363,18 +364,18 @@ fn call<'py>(
                         .parse(decode::<ParseParams>("parse", params)?, &ctx)
                         .await,
                 ),
-                "transform/collect" => to_json(
+                "parse/transform/each" => to_json(
                     plugin
-                        .collect(
-                            decode::<TransformCollectParams>("transform/collect", params)?,
+                        .read(
+                            decode::<ParseTransformEachParams>("parse/transform/each", params)?,
                             &ctx,
                         )
                         .await,
                 ),
-                "transform/apply" => to_json(
+                "render/transform/each" => to_json(
                     plugin
                         .apply(
-                            decode::<TransformApplyParams>("transform/apply", params)?,
+                            decode::<RenderTransformEachParams>("render/transform/each", params)?,
                             &ctx,
                         )
                         .await,
@@ -384,9 +385,12 @@ fn call<'py>(
                         .render(decode::<RenderParams>("render", params)?, &ctx)
                         .await,
                 ),
-                "render/site" => to_json(
+                "render/transform/all" => to_json(
                     plugin
-                        .render_site(decode::<RenderSiteParams>("render/site", params)?, &ctx)
+                        .render_all(
+                            decode::<RenderTransformAllParams>("render/transform/all", params)?,
+                            &ctx,
+                        )
                         .await,
                 ),
                 other => Err(format!("unknown method {other:?}")),
@@ -411,7 +415,7 @@ fn call<'py>(
     {
         as_bytes(dict, &result)?;
     }
-    if method == "render/site"
+    if method == "render/transform/all"
         && let Ok(dict) = result_py.cast::<PyDict>()
         && let Some(files) = dict.get_item("files")?
         && let Ok(files) = files.cast::<PyList>()

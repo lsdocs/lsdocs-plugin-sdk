@@ -5,7 +5,7 @@
 //!
 //! ```no_run
 //! use lsdocs_plugin_sdk::{Context, Plugin, PluginResult, Transformer};
-//! use lsdocs_plugin_sdk::protocol::{TransformApplyParams, TransformApplyResult};
+//! use lsdocs_plugin_sdk::protocol::{RenderTransformEachParams, RenderTransformEachResult};
 //!
 //! struct Shout;
 //!
@@ -16,11 +16,11 @@
 //!
 //!     async fn apply(
 //!         &self,
-//!         params: TransformApplyParams,
+//!         params: RenderTransformEachParams,
 //!         ctx: &Context,
-//!     ) -> PluginResult<TransformApplyResult> {
+//!     ) -> PluginResult<RenderTransformEachResult> {
 //!         ctx.info("shouting").await;
-//!         Ok(TransformApplyResult { document: params.document, ..Default::default() })
+//!         Ok(RenderTransformEachResult { document: params.document, ..Default::default() })
 //!     }
 //! }
 //!
@@ -48,12 +48,12 @@ pub use lsdocs_protocol as protocol;
 pub use lsdocs_protocol::doctree;
 use lsdocs_protocol::doctree::Value;
 use lsdocs_protocol::{
-    Capabilities, Diagnostic, DiagnosticsParams, InitializeParams, InitializeResult, LogLevel,
-    LogParams, PROTOCOL_VERSION, ParseCapability, ParseParams, ParseResult, ProgramInfo,
-    ProgressParams, RenderCapability, RenderParams, RenderResult, RenderSiteParams,
-    RenderSiteResult, SiteInfo, SiteParseParams, Syntax, TransformApplyParams,
-    TransformApplyResult, TransformCapability, TransformCollectParams, TransformCollectResult,
-    TransformCollectedResult, notification, request,
+    Capabilities, Diagnostic, DiagnosticsParams, HostParseParams, InitializeParams,
+    InitializeResult, LogLevel, LogParams, PROTOCOL_VERSION, ParseCapability, ParseParams,
+    ParseResult, ParseTransformAllResult, ParseTransformEachParams, ParseTransformEachResult,
+    ProgramInfo, ProgressParams, RenderCapability, RenderParams, RenderResult,
+    RenderTransformAllParams, RenderTransformAllResult, RenderTransformEachParams,
+    RenderTransformEachResult, SiteInfo, Syntax, TransformCapability, notification, request,
 };
 /// Tracing target for wire logs; enable it at TRACE level to log every
 /// protocol message.
@@ -125,10 +125,10 @@ pub trait Parser: Send + Sync + 'static {
 /// Rewrites documents, optionally using data collected from every document
 /// first.
 pub trait Transformer: Send + Sync + 'static {
-    /// Whether to run the collect pass. If true, [`Transformer::collect`] is
+    /// Whether to run the collect pass. If true, [`Transformer::read`] is
     /// called for every document before any [`Transformer::apply`], and
     /// `apply` receives everything collected.
-    const COLLECTS: bool = false;
+    const READS: bool = false;
 
     /// Node kinds this transformer looks at, e.g. `["heading"]`. The host
     /// skips documents containing none of them. Empty means every document.
@@ -137,34 +137,34 @@ pub trait Transformer: Send + Sync + 'static {
     }
 
     /// Gathers data from one document. Only called if
-    /// [`Transformer::COLLECTS`] is true.
-    fn collect(
+    /// [`Transformer::READS`] is true.
+    fn read(
         &self,
-        _params: TransformCollectParams,
+        _params: ParseTransformEachParams,
         _ctx: &Context,
-    ) -> impl Future<Output = PluginResult<TransformCollectResult>> + Send {
-        async { Ok(TransformCollectResult::default()) }
+    ) -> impl Future<Output = PluginResult<ParseTransformEachResult>> + Send {
+        async { Ok(ParseTransformEachResult::default()) }
     }
 
     /// Generates documents from everything collected (a map from each
     /// document's source to its collected data), once between the two
     /// passes. They join the site: the apply pass, later transformers and
     /// rendering see them like any other document. Only called if
-    /// [`Transformer::COLLECTS`] is true; none by default.
-    fn generate(
+    /// [`Transformer::READS`] is true; none by default.
+    fn conclude(
         &self,
         _collected: &Value,
         _ctx: &Context,
-    ) -> impl Future<Output = PluginResult<TransformCollectedResult>> + Send {
-        async { Ok(TransformCollectedResult::default()) }
+    ) -> impl Future<Output = PluginResult<ParseTransformAllResult>> + Send {
+        async { Ok(ParseTransformAllResult::default()) }
     }
 
     /// Transforms one document.
     fn apply(
         &self,
-        params: TransformApplyParams,
+        params: RenderTransformEachParams,
         ctx: &Context,
-    ) -> impl Future<Output = PluginResult<TransformApplyResult>> + Send;
+    ) -> impl Future<Output = PluginResult<RenderTransformEachResult>> + Send;
 }
 
 /// Turns documents into output files.
@@ -172,10 +172,10 @@ pub trait Renderer: Send + Sync + 'static {
     /// Output formats produced, e.g. `["html"]`.
     fn formats(&self) -> Vec<String>;
 
-    /// Whether to handle `render/site`. If true,
-    /// [`Renderer::render_site`] is called once after every document is
+    /// Whether to handle `render/transform/all`. If true,
+    /// [`Renderer::render_all`] is called once after every document is
     /// rendered.
-    const SITE: bool = false;
+    const RENDERS_ALL: bool = false;
 
     /// Renders one document.
     fn render(
@@ -185,13 +185,13 @@ pub trait Renderer: Send + Sync + 'static {
     ) -> impl Future<Output = PluginResult<RenderResult>> + Send;
 
     /// Produces site-wide files, such as a sitemap, from the list of
-    /// rendered pages. Only called if [`Renderer::SITE`] is true.
-    fn render_site(
+    /// rendered pages. Only called if [`Renderer::RENDERS_ALL`] is true.
+    fn render_all(
         &self,
-        _params: RenderSiteParams,
+        _params: RenderTransformAllParams,
         _ctx: &Context,
-    ) -> impl Future<Output = PluginResult<RenderSiteResult>> + Send {
-        async { Ok(RenderSiteResult::default()) }
+    ) -> impl Future<Output = PluginResult<RenderTransformAllResult>> + Send {
+        async { Ok(RenderTransformAllResult::default()) }
     }
 }
 
@@ -220,76 +220,76 @@ impl<T: Parser> DynParser for T {
 }
 
 trait DynTransformer: Send + Sync {
-    fn collects(&self) -> bool;
+    fn reads(&self) -> bool;
     fn nodes(&self) -> Vec<String>;
-    fn collect<'a>(
+    fn read<'a>(
         &'a self,
-        params: TransformCollectParams,
+        params: ParseTransformEachParams,
         ctx: &'a Context,
-    ) -> BoxFuture<'a, PluginResult<TransformCollectResult>>;
-    fn generate<'a>(
+    ) -> BoxFuture<'a, PluginResult<ParseTransformEachResult>>;
+    fn conclude<'a>(
         &'a self,
         collected: &'a Value,
         ctx: &'a Context,
-    ) -> BoxFuture<'a, PluginResult<TransformCollectedResult>>;
+    ) -> BoxFuture<'a, PluginResult<ParseTransformAllResult>>;
     fn apply<'a>(
         &'a self,
-        params: TransformApplyParams,
+        params: RenderTransformEachParams,
         ctx: &'a Context,
-    ) -> BoxFuture<'a, PluginResult<TransformApplyResult>>;
+    ) -> BoxFuture<'a, PluginResult<RenderTransformEachResult>>;
 }
 
 impl<T: Transformer> DynTransformer for T {
-    fn collects(&self) -> bool {
-        T::COLLECTS
+    fn reads(&self) -> bool {
+        T::READS
     }
     fn nodes(&self) -> Vec<String> {
         Transformer::nodes(self)
     }
-    fn collect<'a>(
+    fn read<'a>(
         &'a self,
-        params: TransformCollectParams,
+        params: ParseTransformEachParams,
         ctx: &'a Context,
-    ) -> BoxFuture<'a, PluginResult<TransformCollectResult>> {
-        Box::pin(Transformer::collect(self, params, ctx))
+    ) -> BoxFuture<'a, PluginResult<ParseTransformEachResult>> {
+        Box::pin(Transformer::read(self, params, ctx))
     }
-    fn generate<'a>(
+    fn conclude<'a>(
         &'a self,
         collected: &'a Value,
         ctx: &'a Context,
-    ) -> BoxFuture<'a, PluginResult<TransformCollectedResult>> {
-        Box::pin(Transformer::generate(self, collected, ctx))
+    ) -> BoxFuture<'a, PluginResult<ParseTransformAllResult>> {
+        Box::pin(Transformer::conclude(self, collected, ctx))
     }
     fn apply<'a>(
         &'a self,
-        params: TransformApplyParams,
+        params: RenderTransformEachParams,
         ctx: &'a Context,
-    ) -> BoxFuture<'a, PluginResult<TransformApplyResult>> {
+    ) -> BoxFuture<'a, PluginResult<RenderTransformEachResult>> {
         Box::pin(Transformer::apply(self, params, ctx))
     }
 }
 
 trait DynRenderer: Send + Sync {
     fn formats(&self) -> Vec<String>;
-    fn site(&self) -> bool;
+    fn renders_all(&self) -> bool;
     fn render<'a>(
         &'a self,
         params: RenderParams,
         ctx: &'a Context,
     ) -> BoxFuture<'a, PluginResult<RenderResult>>;
-    fn render_site<'a>(
+    fn render_all<'a>(
         &'a self,
-        params: RenderSiteParams,
+        params: RenderTransformAllParams,
         ctx: &'a Context,
-    ) -> BoxFuture<'a, PluginResult<RenderSiteResult>>;
+    ) -> BoxFuture<'a, PluginResult<RenderTransformAllResult>>;
 }
 
 impl<T: Renderer> DynRenderer for T {
     fn formats(&self) -> Vec<String> {
         Renderer::formats(self)
     }
-    fn site(&self) -> bool {
-        T::SITE
+    fn renders_all(&self) -> bool {
+        T::RENDERS_ALL
     }
     fn render<'a>(
         &'a self,
@@ -298,12 +298,12 @@ impl<T: Renderer> DynRenderer for T {
     ) -> BoxFuture<'a, PluginResult<RenderResult>> {
         Box::pin(Renderer::render(self, params, ctx))
     }
-    fn render_site<'a>(
+    fn render_all<'a>(
         &'a self,
-        params: RenderSiteParams,
+        params: RenderTransformAllParams,
         ctx: &'a Context,
-    ) -> BoxFuture<'a, PluginResult<RenderSiteResult>> {
-        Box::pin(Renderer::render_site(self, params, ctx))
+    ) -> BoxFuture<'a, PluginResult<RenderTransformAllResult>> {
+        Box::pin(Renderer::render_all(self, params, ctx))
     }
 }
 
@@ -441,11 +441,11 @@ impl Plugin {
             }),
             transform: self.transformer.as_ref().map(|t| TransformCapability {
                 nodes: t.nodes(),
-                collect: t.collects(),
+                each: t.reads(),
             }),
             render: self.renderer.as_ref().map(|r| RenderCapability {
                 formats: r.formats(),
-                site: r.site(),
+                all: r.renders_all(),
             }),
             max_concurrency: self.max_concurrency,
             cache: None,
@@ -473,38 +473,38 @@ impl Plugin {
 
     /// Runs the collect pass on a document. Fails if the plugin has no
     /// transformer.
-    pub async fn collect(
+    pub async fn read(
         &self,
-        params: TransformCollectParams,
+        params: ParseTransformEachParams,
         ctx: &Context,
-    ) -> PluginResult<TransformCollectResult> {
+    ) -> PluginResult<ParseTransformEachResult> {
         self.transformer
             .as_ref()
             .ok_or_else(|| missing("transformer"))?
-            .collect(params, ctx)
+            .read(params, ctx)
             .await
     }
 
     /// Generates documents from everything collected. Fails if the plugin
     /// has no transformer.
-    pub async fn generate(
+    pub async fn conclude(
         &self,
         collected: &Value,
         ctx: &Context,
-    ) -> PluginResult<TransformCollectedResult> {
+    ) -> PluginResult<ParseTransformAllResult> {
         self.transformer
             .as_ref()
             .ok_or_else(|| missing("transformer"))?
-            .generate(collected, ctx)
+            .conclude(collected, ctx)
             .await
     }
 
     /// Transforms a document. Fails if the plugin has no transformer.
     pub async fn apply(
         &self,
-        params: TransformApplyParams,
+        params: RenderTransformEachParams,
         ctx: &Context,
-    ) -> PluginResult<TransformApplyResult> {
+    ) -> PluginResult<RenderTransformEachResult> {
         self.transformer
             .as_ref()
             .ok_or_else(|| missing("transformer"))?
@@ -523,15 +523,15 @@ impl Plugin {
 
     /// Produces site-wide files after rendering. Fails if the plugin has no
     /// renderer.
-    pub async fn render_site(
+    pub async fn render_all(
         &self,
-        params: RenderSiteParams,
+        params: RenderTransformAllParams,
         ctx: &Context,
-    ) -> PluginResult<RenderSiteResult> {
+    ) -> PluginResult<RenderTransformAllResult> {
         self.renderer
             .as_ref()
             .ok_or_else(|| missing("renderer"))?
-            .render_site(params, ctx)
+            .render_all(params, ctx)
             .await
     }
 }
@@ -562,8 +562,8 @@ pub trait EventSink: Send + Sync + 'static {
     fn send(&self, event: Event) -> BoxFuture<'_, ()>;
 
     /// Asks the host to parse text with the parser of a file extension
-    /// (`site/parse`). The default says it cannot.
-    fn parse(&self, params: SiteParseParams) -> BoxFuture<'_, Result<ParseResult, String>> {
+    /// (`host/parse`). The default says it cannot.
+    fn parse(&self, params: HostParseParams) -> BoxFuture<'_, Result<ParseResult, String>> {
         let _ = params;
         Box::pin(async { Err("parsing through the host is not available here".to_owned()) })
     }
@@ -618,7 +618,7 @@ impl Context {
         text: impl Into<String>,
     ) -> PluginResult<ParseResult> {
         self.events
-            .parse(SiteParseParams {
+            .parse(HostParseParams {
                 extension: extension.into(),
                 source: source.into(),
                 text: text.into(),
@@ -687,10 +687,10 @@ impl EventSink for PeerSink {
         })
     }
 
-    fn parse(&self, params: SiteParseParams) -> BoxFuture<'_, Result<ParseResult, String>> {
+    fn parse(&self, params: HostParseParams) -> BoxFuture<'_, Result<ParseResult, String>> {
         Box::pin(async move {
             self.0
-                .request::<request::SiteParse>(&params)
+                .request::<request::HostParse>(&params)
                 .await
                 .map_err(|e| e.to_string())
         })
@@ -741,7 +741,7 @@ pub mod testing {
         Context::new(Arc::new(Discard), initialize)
     }
 
-    /// Answers `site/parse` with the given parser plugins, as the host
+    /// Answers `host/parse` with the given parser plugins, as the host
     /// would; events are dropped.
     struct WithParsers {
         parsers: Vec<Plugin>,
@@ -754,7 +754,7 @@ pub mod testing {
             Box::pin(async {})
         }
 
-        fn parse(&self, params: SiteParseParams) -> BoxFuture<'_, Result<ParseResult, String>> {
+        fn parse(&self, params: HostParseParams) -> BoxFuture<'_, Result<ParseResult, String>> {
             Box::pin(async move {
                 let parser = self
                     .parsers
@@ -783,7 +783,7 @@ pub mod testing {
         }
     }
 
-    /// A context for `initialize` whose `site/parse` requests go to
+    /// A context for `initialize` whose `host/parse` requests go to
     /// `parsers` (the first taking the extension), with the syntax that
     /// `plugin` and the parsers declare, as the host would give them.
     pub fn context_with_parsers(
@@ -825,14 +825,14 @@ pub mod testing {
         mut documents: Vec<Document>,
     ) -> PluginResult<Vec<(Document, Vec<Diagnostic>)>> {
         let ctx = ctx.clone();
-        let collects = plugin.capabilities().transform.is_some_and(|t| t.collect);
+        let collects = plugin.capabilities().transform.is_some_and(|t| t.each);
         let mut collected = Value::Null;
         if collects {
             let mut data = serde_json::Map::new();
             for document in &documents {
                 let result = plugin
-                    .collect(
-                        TransformCollectParams {
+                    .read(
+                        ParseTransformEachParams {
                             document: document.clone(),
                         },
                         &ctx,
@@ -841,14 +841,14 @@ pub mod testing {
                 data.insert(document.source.clone(), result.data);
             }
             collected = Value::Object(data);
-            let generated = plugin.generate(&collected, &ctx).await?;
+            let generated = plugin.conclude(&collected, &ctx).await?;
             documents.extend(generated.documents);
         }
         let mut out = Vec::with_capacity(documents.len());
         for document in documents {
             let result = plugin
                 .apply(
-                    TransformApplyParams {
+                    RenderTransformEachParams {
                         document,
                         collected: collected.clone(),
                     },
@@ -969,26 +969,26 @@ fn router(plugin: Arc<Plugin>) -> Router {
         route!(request::Parse, parse);
     }
     if plugin.transformer.is_some() {
-        route!(request::TransformCollect, collect);
+        route!(request::ParseTransformEach, read);
         // The collected data arrives once, not with every apply request;
         // keep it and fill it into each one.
         let collected: Arc<std::sync::Mutex<Arc<Value>>> = Arc::default();
         let store = collected.clone();
         let generator = plugin.clone();
         let generate_session = session.clone();
-        router = router.request::<request::TransformCollected, _, _>(move |params, _| {
+        router = router.request::<request::ParseTransformAll, _, _>(move |params, _| {
             let data = Arc::new(params.collected);
             *store.lock().unwrap_or_else(PoisonError::into_inner) = Arc::clone(&data);
             let plugin = generator.clone();
             let ctx = generate_session.get().cloned();
             async move {
                 let ctx = ctx.ok_or_else(not_initialized)?;
-                plugin.generate(&data, &ctx).await.map_err(plugin_error)
+                plugin.conclude(&data, &ctx).await.map_err(plugin_error)
             }
         });
         let plugin = plugin.clone();
         let session = session.clone();
-        router = router.request::<request::TransformApply, _, _>(move |mut params, _| {
+        router = router.request::<request::RenderTransformEach, _, _>(move |mut params, _| {
             let plugin = plugin.clone();
             let ctx = session.get().cloned();
             if params.collected.is_null() {
@@ -1003,7 +1003,7 @@ fn router(plugin: Arc<Plugin>) -> Router {
     }
     if plugin.renderer.is_some() {
         route!(request::Render, render);
-        route!(request::RenderSite, render_site);
+        route!(request::RenderTransformAll, render_all);
     }
     router
 }
@@ -1028,18 +1028,18 @@ mod tests {
     struct Upper;
 
     impl Transformer for Upper {
-        const COLLECTS: bool = true;
+        const READS: bool = true;
 
         fn nodes(&self) -> Vec<String> {
             vec!["text".into()]
         }
 
-        async fn collect(
+        async fn read(
             &self,
-            params: TransformCollectParams,
+            params: ParseTransformEachParams,
             _ctx: &Context,
-        ) -> PluginResult<TransformCollectResult> {
-            Ok(TransformCollectResult {
+        ) -> PluginResult<ParseTransformEachResult> {
+            Ok(ParseTransformEachResult {
                 data: serde_json::json!(params.document.children.len()),
                 diagnostics: vec![],
                 dependencies: vec![],
@@ -1048,9 +1048,9 @@ mod tests {
 
         async fn apply(
             &self,
-            params: TransformApplyParams,
+            params: RenderTransformEachParams,
             ctx: &Context,
-        ) -> PluginResult<TransformApplyResult> {
+        ) -> PluginResult<RenderTransformEachResult> {
             ctx.info(format!("site is {:?}", ctx.site().title)).await;
             let mut document = params.document;
             for node in &mut document.children {
@@ -1058,7 +1058,7 @@ mod tests {
                     t.value = t.value.to_uppercase();
                 }
             }
-            Ok(TransformApplyResult {
+            Ok(RenderTransformEachResult {
                 document,
                 diagnostics: vec![],
                 dependencies: vec![],
@@ -1113,7 +1113,7 @@ mod tests {
         assert_eq!(caps.parse.unwrap().extensions, ["txt"]);
         let transform = caps.transform.unwrap();
         assert_eq!(transform.nodes, ["text"]);
-        assert!(transform.collect);
+        assert!(transform.each);
         assert!(caps.render.is_none());
         assert_eq!(
             Plugin::new("empty", "0").capabilities(),
@@ -1138,7 +1138,7 @@ mod tests {
         let plugin = plugin();
         let result = plugin
             .apply(
-                TransformApplyParams {
+                RenderTransformEachParams {
                     document: doc(),
                     collected: Value::Null,
                 },
@@ -1180,7 +1180,7 @@ mod tests {
 
         // Phase requests before initialize are refused.
         let early = host
-            .request::<request::TransformApply>(&TransformApplyParams {
+            .request::<request::RenderTransformEach>(&RenderTransformEachParams {
                 document: doc(),
                 collected: Value::Null,
             })
@@ -1199,13 +1199,13 @@ mod tests {
         host.notify::<notification::Initialized>(&()).await.unwrap();
 
         let collected = host
-            .request::<request::TransformCollect>(&TransformCollectParams { document: doc() })
+            .request::<request::ParseTransformEach>(&ParseTransformEachParams { document: doc() })
             .await
             .unwrap();
         assert_eq!(collected.data, serde_json::json!(1));
 
         let applied = host
-            .request::<request::TransformApply>(&TransformApplyParams {
+            .request::<request::RenderTransformEach>(&RenderTransformEachParams {
                 document: doc(),
                 collected: Value::Null,
             })
