@@ -15,7 +15,7 @@
 //! | parse, apply | the document alone (an object with `children` but no `document`) |
 //! | read | any value, taken as `data` |
 //! | render | a string, taken as `output`, with `extension` set to the format |
-//! | render/site | a list, taken as `files` |
+//! | render_all | a list, taken as `files` |
 //!
 //! Binary output (`output` of `render` and of each `render/transform/all` file) may be
 //! a string or bytes; bindings pass bytes as a list of byte values.
@@ -412,7 +412,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn render_site_handlers() {
+    async fn render_all_handlers() {
         use lsdocs_plugin_sdk::protocol::RenderedPage;
         let plugin = DynamicPlugin {
             render_all: Some(handler(|params, _| {
