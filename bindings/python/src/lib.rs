@@ -214,7 +214,7 @@ impl PyContext {
     /// The plugin's `options` from the site config (None if absent).
     #[getter]
     fn options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        to_py(py, self.ctx.options())
+        to_py(py, self.ctx.settings())
     }
 
     /// Sends a log line: level is "error", "warn", "info", "debug" or "trace".
@@ -347,18 +347,18 @@ fn call<'py>(
     let init = InitializeParams {
         protocol_version: PROTOCOL_VERSION.into(),
         site,
-        options,
         ..InitializeParams::default()
     };
+    let setup = lsdocs_plugin_sdk::Setup::with_settings(init, options);
     let plugin = plugin.inner.clone().into_plugin();
     let recorder = Arc::new(Recorder::default());
-    let ctx = Context::new(recorder.clone(), &init);
+    let ctx = Context::new(recorder.clone(), &setup);
     let method_name = method.to_owned();
     let rt = runtime()?;
     let result: Result<Value, String> = py.detach(|| {
         rt.block_on(async {
             match method_name.as_str() {
-                "initialize" => to_json(Ok(plugin.initialize_result(&init))),
+                "initialize" => to_json(Ok(plugin.initialize_result(&setup))),
                 "parse" => to_json(
                     plugin
                         .parse(decode::<ParseParams>("parse", params)?, &ctx)

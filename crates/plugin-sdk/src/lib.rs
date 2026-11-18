@@ -43,12 +43,13 @@ use std::pin::Pin;
 use std::process::ExitCode;
 use std::sync::{Arc, OnceLock, PoisonError};
 
+pub mod config;
 pub mod links;
 pub use lsdocs_protocol as protocol;
 pub use lsdocs_protocol::doctree;
 use lsdocs_protocol::doctree::Value;
 use lsdocs_protocol::{
-    Capabilities, Diagnostic, DiagnosticsParams, HostParseParams, InitializeParams,
+    Capabilities, ConfigInfo, Diagnostic, DiagnosticsParams, HostParseParams, InitializeParams,
     InitializeResult, LogLevel, LogParams, PROTOCOL_VERSION, ParseCapability, ParseParams,
     ParseResult, ParseTransformAllResult, ParseTransformEachParams, ParseTransformEachResult,
     ProgramInfo, ProgressParams, RenderCapability, RenderParams, RenderResult,
@@ -322,13 +323,41 @@ pub struct Plugin {
     max_concurrency: Option<u32>,
     cache_key: Option<CacheKey>,
     syntax: Option<SyntaxFn>,
+    settings: Option<SettingsFn>,
 }
 
-/// Computes a plugin's cache key from its `initialize` params.
-type CacheKey = Box<dyn Fn(&InitializeParams) -> Option<String> + Send + Sync>;
+/// Computes a plugin's cache key from its session's setup.
+type CacheKey = Box<dyn Fn(&Setup) -> Option<String> + Send + Sync>;
 
-/// Computes the syntax a plugin declares from its `initialize` params.
-type SyntaxFn = Box<dyn Fn(&InitializeParams) -> Syntax + Send + Sync>;
+/// Computes the syntax a plugin declares from its session's setup.
+type SyntaxFn = Box<dyn Fn(&Setup) -> Syntax + Send + Sync>;
+
+/// Reads a plugin's settings from `.config/`.
+type SettingsFn = Box<dyn Fn(&ConfigInfo) -> Result<config::Loaded, String> + Send + Sync>;
+
+/// A session's setup: the `initialize` params and the settings the
+/// plugin's loader read (see [`Plugin::settings`]).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Setup {
+    /// The `initialize` params.
+    pub params: InitializeParams,
+    /// The plugin's settings (null if it reads none).
+    pub settings: Value,
+    /// The files they came from, for the host's cache keys.
+    pub config_files: Vec<String>,
+}
+
+impl Setup {
+    /// A setup with these settings, as if a loader had read them (for
+    /// tests, and plugins built without a loader).
+    pub fn with_settings(params: InitializeParams, settings: Value) -> Self {
+        Self {
+            params,
+            settings,
+            config_files: Vec::new(),
+        }
+    }
+}
 
 impl fmt::Debug for Plugin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -352,6 +381,7 @@ impl Plugin {
             max_concurrency: None,
             cache_key: None,
             syntax: None,
+            settings: None,
         }
     }
 
@@ -380,33 +410,56 @@ impl Plugin {
     }
 
     /// Lets the host cache the plugin's results: they depend only on each
-    /// request, the site settings and the plugin's name, version and
-    /// options. See [`Capabilities::cache`].
+    /// request, the site settings, the plugin's name and version and its
+    /// settings files. See [`Capabilities::cache`].
     pub fn cacheable(self) -> Self {
         self.cache_key(|_| Some(String::new()))
     }
 
     /// Lets the host cache the plugin's results, as [`Plugin::cacheable`],
     /// with a key covering any other input the plugin reads, computed from
-    /// the `initialize` params (e.g. a digest of a template file named in
-    /// the options). Returning `None` turns caching off for the session.
+    /// the session's setup (e.g. a digest of a template file named in the
+    /// settings). Returning `None` turns caching off for the session.
     pub fn cache_key(
         mut self,
-        key: impl Fn(&InitializeParams) -> Option<String> + Send + Sync + 'static,
+        key: impl Fn(&Setup) -> Option<String> + Send + Sync + 'static,
     ) -> Self {
         self.cache_key = Some(Box::new(key));
         self
     }
 
     /// Declares the directives and roles the plugin handles (see
-    /// [`Capabilities::syntax`]), computed from the `initialize` params so
-    /// they may depend on the plugin's options.
-    pub fn syntax(
-        mut self,
-        syntax: impl Fn(&InitializeParams) -> Syntax + Send + Sync + 'static,
-    ) -> Self {
+    /// [`Capabilities::syntax`]), computed from the session's setup so
+    /// they may depend on the plugin's settings.
+    pub fn syntax(mut self, syntax: impl Fn(&Setup) -> Syntax + Send + Sync + 'static) -> Self {
         self.syntax = Some(Box::new(syntax));
         self
+    }
+
+    /// Reads the plugin's settings at `initialize`, from the site's
+    /// `.config/` directory (see [`config`]). The settings are
+    /// [`Context::settings`] and [`Setup::settings`]; an error fails
+    /// `initialize`.
+    pub fn settings(
+        mut self,
+        loader: impl Fn(&ConfigInfo) -> Result<config::Loaded, String> + Send + Sync + 'static,
+    ) -> Self {
+        self.settings = Some(Box::new(loader));
+        self
+    }
+
+    /// The setup of the session `initialize` starts: its params and the
+    /// settings the plugin's loader reads.
+    pub fn setup(&self, params: &InitializeParams) -> Result<Setup, String> {
+        let loaded = match &self.settings {
+            Some(loader) => loader(&params.config)?,
+            None => config::Loaded::default(),
+        };
+        Ok(Setup {
+            params: params.clone(),
+            settings: loaded.settings,
+            config_files: loaded.files,
+        })
     }
 
     /// The plugin's name and version.
@@ -419,13 +472,13 @@ impl Plugin {
 
     /// What the plugin can do in the session `initialize` starts: its
     /// [`Plugin::capabilities`] plus its cache key and syntax.
-    pub fn capabilities_for(&self, initialize: &InitializeParams) -> Capabilities {
+    pub fn capabilities_for(&self, setup: &Setup) -> Capabilities {
         Capabilities {
-            cache: self.cache_key.as_ref().and_then(|key| key(initialize)),
+            cache: self.cache_key.as_ref().and_then(|key| key(setup)),
             syntax: self
                 .syntax
                 .as_ref()
-                .map(|syntax| syntax(initialize))
+                .map(|syntax| syntax(setup))
                 .unwrap_or_default(),
             ..self.capabilities()
         }
@@ -454,11 +507,12 @@ impl Plugin {
     }
 
     /// The answer to `initialize`.
-    pub fn initialize_result(&self, initialize: &InitializeParams) -> InitializeResult {
+    pub fn initialize_result(&self, setup: &Setup) -> InitializeResult {
         InitializeResult {
             protocol_version: PROTOCOL_VERSION.into(),
             plugin: self.info(),
-            capabilities: self.capabilities_for(initialize),
+            capabilities: self.capabilities_for(setup),
+            config_files: setup.config_files.clone(),
         }
     }
 
@@ -575,25 +629,25 @@ pub trait EventSink: Send + Sync + 'static {
 pub struct Context {
     events: Arc<dyn EventSink>,
     site: Arc<SiteInfo>,
-    options: Arc<Value>,
+    settings: Arc<Value>,
 }
 
 impl fmt::Debug for Context {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Context")
             .field("site", &self.site)
-            .field("options", &self.options)
+            .field("settings", &self.settings)
             .finish_non_exhaustive()
     }
 }
 
 impl Context {
     /// A context for the session started by `initialize`.
-    pub fn new(events: Arc<dyn EventSink>, initialize: &InitializeParams) -> Self {
+    pub fn new(events: Arc<dyn EventSink>, setup: &Setup) -> Self {
         Self {
             events,
-            site: Arc::new(initialize.site.clone()),
-            options: Arc::new(initialize.options.clone()),
+            site: Arc::new(setup.params.site.clone()),
+            settings: Arc::new(setup.settings.clone()),
         }
     }
 
@@ -602,9 +656,10 @@ impl Context {
         &self.site
     }
 
-    /// The plugin's `options` from the site config (null if none).
-    pub fn options(&self) -> &Value {
-        &self.options
+    /// The plugin's settings, as its loader read them (null if none; see
+    /// [`Plugin::settings`]).
+    pub fn settings(&self) -> &Value {
+        &self.settings
     }
 
     /// Parses `text` with the site's parser for files with `extension`
@@ -737,8 +792,17 @@ pub mod testing {
 
     /// A context for `initialize` whose events (logs, progress, notified
     /// diagnostics) are dropped.
-    pub fn context(initialize: &InitializeParams) -> Context {
-        Context::new(Arc::new(Discard), initialize)
+    pub fn context(setup: &Setup) -> Context {
+        Context::new(Arc::new(Discard), setup)
+    }
+
+    /// The setup `plugin` gets for `params`: its loader reads its settings
+    /// from `params.config`. Panics if they cannot be read.
+    #[allow(clippy::panic)]
+    pub fn setup(plugin: &Plugin, params: InitializeParams) -> Setup {
+        plugin
+            .setup(&params)
+            .unwrap_or_else(|e| panic!("cannot read the settings: {e}"))
     }
 
     /// Answers `host/parse` with the given parser plugins, as the host
@@ -746,7 +810,7 @@ pub mod testing {
     struct WithParsers {
         parsers: Vec<Plugin>,
         syntax: Syntax,
-        initialize: InitializeParams,
+        setup: Setup,
     }
 
     impl EventSink for WithParsers {
@@ -767,7 +831,7 @@ pub mod testing {
                         })
                     })
                     .ok_or_else(|| format!("no parser takes `.{}` files", params.extension))?;
-                let ctx = context(&self.initialize);
+                let ctx = context(&self.setup);
                 parser
                     .parse(
                         ParseParams {
@@ -786,21 +850,17 @@ pub mod testing {
     /// A context for `initialize` whose `host/parse` requests go to
     /// `parsers` (the first taking the extension), with the syntax that
     /// `plugin` and the parsers declare, as the host would give them.
-    pub fn context_with_parsers(
-        plugin: &Plugin,
-        initialize: &InitializeParams,
-        parsers: Vec<Plugin>,
-    ) -> Context {
-        let mut syntax = plugin.capabilities_for(initialize).syntax;
+    pub fn context_with_parsers(plugin: &Plugin, setup: &Setup, parsers: Vec<Plugin>) -> Context {
+        let mut syntax = plugin.capabilities_for(setup).syntax;
         for parser in &parsers {
-            syntax.merge(&parser.capabilities_for(initialize).syntax);
+            syntax.merge(&parser.capabilities_for(setup).syntax);
         }
         let sink = WithParsers {
             parsers,
             syntax,
-            initialize: initialize.clone(),
+            setup: setup.clone(),
         };
-        Context::new(Arc::new(sink), initialize)
+        Context::new(Arc::new(sink), setup)
     }
 
     /// Runs `plugin`'s transformer over `documents` the way the host does:
@@ -811,10 +871,10 @@ pub mod testing {
     /// host, every document is passed, whatever node kinds it contains.
     pub async fn run_transform(
         plugin: &Plugin,
-        initialize: &InitializeParams,
+        setup: &Setup,
         documents: Vec<Document>,
     ) -> PluginResult<Vec<(Document, Vec<Diagnostic>)>> {
-        run_transform_in(plugin, &context(initialize), documents).await
+        run_transform_in(plugin, &context(setup), documents).await
     }
 
     /// [`run_transform`] with the context `ctx` (e.g. from
@@ -932,16 +992,21 @@ fn router(plugin: Arc<Plugin>) -> Router {
     let init_plugin = plugin.clone();
     let mut router = Router::new()
         .request::<request::Initialize, _, _>(move |params, peer| {
-            let result = if init_session
-                .set(Context::new(Arc::new(PeerSink(peer)), &params))
-                .is_ok()
-            {
-                Ok(init_plugin.initialize_result(&params))
-            } else {
-                Err(RpcError::new(
-                    ErrorCode::INVALID_REQUEST,
-                    "already initialized",
-                ))
+            let result = match init_plugin.setup(&params) {
+                Err(message) => Err(RpcError::internal(message)),
+                Ok(setup) => {
+                    if init_session
+                        .set(Context::new(Arc::new(PeerSink(peer)), &setup))
+                        .is_ok()
+                    {
+                        Ok(init_plugin.initialize_result(&setup))
+                    } else {
+                        Err(RpcError::new(
+                            ErrorCode::INVALID_REQUEST,
+                            "already initialized",
+                        ))
+                    }
+                }
             };
             async move { result }
         })
@@ -1086,19 +1151,22 @@ mod tests {
             .parser(Failing)
     }
 
-    fn init_params() -> InitializeParams {
-        InitializeParams {
-            protocol_version: PROTOCOL_VERSION.into(),
-            host: ProgramInfo {
-                name: "test".into(),
-                version: "0".into(),
+    fn init_params() -> crate::Setup {
+        crate::Setup::with_settings(
+            InitializeParams {
+                protocol_version: PROTOCOL_VERSION.into(),
+                host: ProgramInfo {
+                    name: "test".into(),
+                    version: "0".into(),
+                },
+                site: SiteInfo {
+                    title: Some("Docs".into()),
+                    ..SiteInfo::default()
+                },
+                config: Default::default(),
             },
-            site: SiteInfo {
-                title: Some("Docs".into()),
-                ..SiteInfo::default()
-            },
-            options: Value::Null,
-        }
+            Value::Null,
+        )
     }
 
     fn doc() -> Document {
@@ -1191,7 +1259,7 @@ mod tests {
         );
 
         let init = host
-            .request::<request::Initialize>(&init_params())
+            .request::<request::Initialize>(&init_params().params)
             .await
             .unwrap();
         assert_eq!(init.plugin.name, "upper");

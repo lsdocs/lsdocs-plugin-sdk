@@ -78,7 +78,7 @@ fn js_handler(tsfn: JsHandler) -> Handler {
                 let input = serde_json::json!({
                     "params": params,
                     "site": ctx.site(),
-                    "options": ctx.options(),
+                    "options": ctx.settings(),
                 })
                 .to_string();
                 let promise = tsfn
@@ -274,15 +274,15 @@ pub fn call<'env>(
     let init = InitializeParams {
         protocol_version: VERSION.into(),
         site,
-        options: parse("options", options)?,
         ..InitializeParams::default()
     };
+    let setup = lsdocs_plugin_sdk::Setup::with_settings(init, parse("options", options)?);
     let plugin = plugin.inner.clone().into_plugin();
     env.spawn_future(async move {
         let recorder = Arc::new(Recorder::default());
-        let ctx = Context::new(recorder.clone(), &init);
+        let ctx = Context::new(recorder.clone(), &setup);
         let result = match method.as_str() {
-            "initialize" => to_json(Ok(plugin.initialize_result(&init))),
+            "initialize" => to_json(Ok(plugin.initialize_result(&setup))),
             "parse" => match decode::<ParseParams>("parse", params) {
                 Ok(p) => to_json(plugin.parse(p, &ctx).await),
                 Err(e) => Err(e),

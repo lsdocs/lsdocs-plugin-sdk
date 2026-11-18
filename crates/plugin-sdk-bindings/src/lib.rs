@@ -339,13 +339,16 @@ mod tests {
     fn ctx() -> Context {
         Context::new(
             Arc::new(Ignore),
-            &InitializeParams {
-                site: SiteInfo {
-                    title: Some("T".into()),
-                    ..SiteInfo::default()
+            &lsdocs_plugin_sdk::Setup::with_settings(
+                InitializeParams {
+                    site: SiteInfo {
+                        title: Some("T".into()),
+                        ..SiteInfo::default()
+                    },
+                    ..InitializeParams::default()
                 },
-                ..InitializeParams::default()
-            },
+                serde_json::Value::Null,
+            ),
         )
     }
 
