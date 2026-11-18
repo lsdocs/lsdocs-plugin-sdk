@@ -56,8 +56,8 @@ def entries(nodes: list[Node], depth: int) -> list[dict[str, Any]]:
     return out
 
 
-@plugin.collect
-def collect(params: dict[str, Any], ctx: Context) -> Any:
+@plugin.read
+def read(params: dict[str, Any], ctx: Context) -> Any:
     options = ctx.options or {}
     return {"sections": entries(params["document"]["children"], options.get("depth", 3))}
 

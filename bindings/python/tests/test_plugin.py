@@ -21,8 +21,8 @@ def make_plugin():
         # Bare document shorthand, without `source`.
         return {"children": [text(line) for line in params["text"].splitlines()]}
 
-    @plugin.collect
-    def collect(params, ctx):
+    @plugin.read
+    def read(params, ctx):
         return len(params["document"]["children"])
 
     @plugin.transform(nodes=["text"])
@@ -51,7 +51,7 @@ def test_capabilities_follow_the_handlers():
     caps = make_plugin().capabilities
     assert caps == {
         "parse": {"extensions": ["txt"]},
-        "transform": {"nodes": ["text"], "collect": True},
+        "transform": {"nodes": ["text"], "each": True},
         "render": {"formats": ["txt", "bin"]},
         "max_concurrency": 1,
     }
@@ -71,9 +71,9 @@ def test_parse_shorthand_fills_in_the_document():
     assert events == []
 
 
-def test_collect_and_apply():
+def test_read_and_apply():
     plugin = make_plugin()
-    collected, _ = testing.collect(plugin, doc("a", "b"))
+    collected, _ = testing.read(plugin, doc("a", "b"))
     assert collected == {"data": 2}
 
     result, events = testing.apply(plugin, doc("a", "b"), {"a.txt": 2})
@@ -91,11 +91,11 @@ def test_render_strings_and_bytes():
     assert result == {"output": b"hi\x00\xff", "extension": "dat"}
 
 
-def test_render_site_returns_site_files():
+def test_render_all_returns_extra_files():
     plugin = make_plugin()
     assert "site" not in plugin.capabilities["render"]
 
-    @plugin.render_site
+    @plugin.render_all
     async def site_files(params, ctx):
         paths = [page["path"] for page in params["pages"]]
         # A bare list of files; outputs may be str or bytes.
@@ -104,9 +104,9 @@ def test_render_site_returns_site_files():
             {"path": "raw.bin", "output": b"\x00\xff"},
         ]
 
-    assert plugin.capabilities["render"]["site"] is True
+    assert plugin.capabilities["render"]["all"] is True
     pages = [{"source": "a.txt", "path": "a.txt"}, {"source": "b.txt", "path": "b.txt"}]
-    result, _ = testing.render_site(plugin, pages, "txt")
+    result, _ = testing.render_all(plugin, pages, "txt")
     assert result == {
         "files": [
             {"path": "index.txt", "output": b"a.txt\nb.txt"},
@@ -155,7 +155,7 @@ def test_invalid_results_are_reported():
     def apply(params, ctx):
         return {"document": "not a document"}
 
-    with pytest.raises(RuntimeError, match="invalid transform/apply result"):
+    with pytest.raises(RuntimeError, match="invalid render/transform/each result"):
         testing.apply(plugin, doc())
 
 
@@ -192,8 +192,8 @@ def test_async_handlers_in_every_phase():
         await asyncio.sleep(0)
         return {"children": [text(params["text"])]}
 
-    @plugin.collect
-    async def collect(params, ctx):
+    @plugin.read
+    async def read(params, ctx):
         await asyncio.sleep(0)
         return "collected"
 
@@ -208,7 +208,7 @@ def test_async_handlers_in_every_phase():
         return "rendered"
 
     assert testing.parse(plugin, "a.txt", "hi")[0]["document"]["children"] == [text("hi")]
-    assert testing.collect(plugin, doc())[0] == {"data": "collected"}
+    assert testing.read(plugin, doc())[0] == {"data": "collected"}
     result, events = testing.apply(plugin, doc("x"))
     assert result["document"]["children"] == [text("x")]
     assert events == [{"kind": "log", "level": "info", "message": "from a coroutine"}]

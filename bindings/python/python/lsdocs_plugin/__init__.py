@@ -20,9 +20,9 @@ and a :class:`Context`, and returns the result::
         plugin.serve()
 
 Shorthand results: ``parse`` and ``transform`` handlers may return just the
-document; ``collect`` may return any value (taken as ``data``); ``render`` may
+document; ``read`` may return any value (taken as ``data``); ``render`` may
 return a ``str`` or ``bytes`` (taken as ``output``, with ``extension`` set to
-the format); ``render_site`` may return a list of files.
+the format); ``render_all`` may return a list of files.
 
 Handlers may be ``async def``: coroutines run on one event loop shared by
 all calls, so loop-bound objects (client sessions, locks) can be reused::
@@ -71,19 +71,19 @@ class Plugin:
 
         return register
 
-    def collect(self, func: F | None = None) -> Any:
-        """Registers the collect pass, run on every document before
-        :meth:`transform`. Usable as ``@plugin.collect`` or
-        ``@plugin.collect()``."""
+    def read(self, func: F | None = None) -> Any:
+        """Registers the ``parse/transform/each`` handler, run on every
+        document (reading it, not changing it) before :meth:`transform`.
+        Usable as ``@plugin.read`` or ``@plugin.read()``."""
 
         def register(f: F) -> F:
-            self._native.set_collect(_aio.adapt(f))
+            self._native.set_read(_aio.adapt(f))
             return f
 
         return register(func) if func is not None else register
 
     def transform(self, *, nodes: Iterable[str] = ()) -> Callable[[F], F]:
-        """Registers the transformer. ``nodes`` are the node kinds it looks
+        """Registers the transformer (``render/transform/each``). ``nodes`` are the node kinds it looks
         at (e.g. ``["heading", "custom:toc"]``); documents without any of them
         are not sent. Empty means every document."""
         kinds = list(nodes)
@@ -104,14 +104,14 @@ class Plugin:
 
         return register
 
-    def render_site(self, func: F) -> F:
-        """Registers the ``render/site`` handler, called once after every
-        page is rendered with the list of rendered pages
+    def render_all(self, func: F) -> F:
+        """Registers the ``render/transform/all`` handler, called once after
+        every page is rendered with the list of rendered pages
         (``{"format", "pages": [{"source", "path", "metadata"}]}``). It
-        returns site-wide files: ``{"files": [{"path", "output"}]}`` or just
+        returns files no single page makes: ``{"files": [{"path", "output"}]}`` or just
         the list, each ``output`` a ``str`` or ``bytes``. Only used with a
         renderer (:meth:`render`)."""
-        self._native.set_render_site(_aio.adapt(func))
+        self._native.set_render_all(_aio.adapt(func))
         return func
 
     @property

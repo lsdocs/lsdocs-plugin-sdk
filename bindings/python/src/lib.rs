@@ -163,7 +163,7 @@ impl NativePlugin {
         self.inner.render = Some((formats, py_handler(func)));
     }
 
-    fn set_render_site(&mut self, func: Py<PyAny>) {
+    fn set_render_all(&mut self, func: Py<PyAny>) {
         self.inner.render_all = Some(py_handler(func));
     }
 
