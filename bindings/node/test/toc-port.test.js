@@ -33,7 +33,6 @@ function config(tocPlugin) {
     '',
     '[[plugins]]',
     'name = "toc"',
-    'options = { depth = 3 }',
     tocPlugin,
     '',
     '[[plugins]]',
@@ -57,6 +56,10 @@ function build(tmp, label, tocPlugin, env = {}) {
   const site = path.join(tmp, label)
   fs.mkdirSync(site)
   fs.writeFileSync(path.join(site, 'lsdocs.toml'), config(tocPlugin))
+  // Not the default depth (3), so the port must read its settings.
+  const settings = path.join(site, '.config', 'lsdocs', 'toc')
+  fs.mkdirSync(settings, { recursive: true })
+  fs.writeFileSync(path.join(settings, 'settings.toml'), 'depth = 2\n')
   const proc = spawnSync(LSDOCS, ['build', '--config', path.join(site, 'lsdocs.toml')], {
     env: { ...process.env, ...env },
     encoding: 'utf8',

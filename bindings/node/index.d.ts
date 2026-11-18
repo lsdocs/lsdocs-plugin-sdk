@@ -89,8 +89,13 @@ export interface SiteInfo {
 /** What a handler receives alongside its params. */
 export interface Context {
   readonly site: SiteInfo
-  /** The plugin's `options` from the site config (null if absent). */
-  readonly options: any
+  /**
+   * The plugin's settings: each of its `configFiles` (`{name}` resolved)
+   * mapped to its text, or null if missing.
+   */
+  readonly settings: Record<string, string | null>
+  /** `dir` (the site's `.config/`) and `name` (the plugin's name in the site config). */
+  readonly config: { dir: string; name: string }
   log(level: 'error' | 'warn' | 'info' | 'debug' | 'trace', message: string): void
   debug(message: string): void
   info(message: string): void
@@ -162,6 +167,12 @@ export interface PluginDefinition {
   version?: string
   /** Requests handled at once (default 1). */
   maxConcurrency?: number
+  /**
+   * The files the plugin reads its settings from, relative to `.config/`,
+   * `{name}` standing for its name in the site config (lsdocs' own plugins
+   * use `lsdocs/{name}/settings.toml`). Read when the session starts.
+   */
+  configFiles?: string[]
   parse?: { extensions: string[]; handler: Handler<ParseParams, ParseResult | Document> }
   read?:
     | Handler<ReadParams, ReadResult | unknown>

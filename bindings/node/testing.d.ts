@@ -2,7 +2,10 @@ import type { Document, Plugin, RenderedPage, SiteInfo } from './index'
 
 export interface CallOptions {
   site?: SiteInfo
-  options?: unknown
+  /** `ctx.settings`, as given; without them, the plugin's `configFiles` are read from `config.dir`. */
+  settings?: unknown
+  /** `ctx.config`. */
+  config?: { dir: string; name: string }
 }
 
 export interface Event {

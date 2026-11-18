@@ -15,7 +15,7 @@ export declare const __napiBindingTarget: 'native' | 'wasm32-wasi' | 'wasm32-was
  */
 export declare class NativePlugin {
   /** A plugin with no handlers yet; `max_concurrency` defaults to 1. */
-  constructor(name: string, version: string, maxConcurrency?: number | undefined | null)
+  constructor(name: string, version: string, maxConcurrency?: number | undefined | null, configFiles?: Array<string> | undefined | null)
   /** Sets the parser for files with these extensions. */
   setParse(extensions: Array<string>, handler: (arg: string) => Promise<string>): void
   /** Sets the `parse/transform/each` handler. */
@@ -35,7 +35,7 @@ export declare class NativePlugin {
  * Arguments are JSON; resolves to JSON `{"result", "events"}`. For tests;
  * see `@lsdocs/plugin/testing`.
  */
-export declare function call(plugin: NativePlugin, method: string, params: string, site?: string | undefined | null, options?: string | undefined | null): Promise<string>
+export declare function call(plugin: NativePlugin, method: string, params: string, site?: string | undefined | null, settings?: string | undefined | null, config?: string | undefined | null): Promise<string>
 
 /** Protocol version spoken by this package. */
 export declare const PROTOCOL_VERSION: string

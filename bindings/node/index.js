@@ -33,10 +33,11 @@ const native = require('./native.js')
 const LEVELS = new Set(['error', 'warn', 'info', 'debug', 'trace'])
 
 /** Builds the context passed to handlers; events are recorded in `events`. */
-function makeContext(site, options, events) {
+function makeContext(site, settings, config, events) {
   return {
     site,
-    options,
+    settings,
+    config,
     log(level, message) {
       if (!LEVELS.has(level)) {
         throw new Error(`unknown log level ${JSON.stringify(level)}`)
@@ -78,10 +79,10 @@ function wrap(handler) {
     throw new TypeError('handler must be a function')
   }
   return async (input) => {
-    const { params, site, options } = JSON.parse(input)
+    const { params, site, settings, config } = JSON.parse(input)
     const events = []
     try {
-      const result = await handler(params, makeContext(site, options, events))
+      const result = await handler(params, makeContext(site, settings, config, events))
       return toJson({ result: result === undefined ? null : result, events })
     } catch (err) {
       const error = err instanceof Error ? err.stack || String(err) : String(err)
@@ -99,11 +100,11 @@ function split(spec, what) {
 
 class Plugin {
   constructor(definition) {
-    const { name, version = '0.0.0', maxConcurrency = 1 } = definition
+    const { name, version = '0.0.0', maxConcurrency = 1, configFiles = [] } = definition
     if (typeof name !== 'string' || !name) throw new TypeError('name is required')
     this.name = name
     this.version = version
-    this.native = new native.NativePlugin(name, version, maxConcurrency)
+    this.native = new native.NativePlugin(name, version, maxConcurrency, configFiles)
 
     if (definition.parse) {
       const [handler, { extensions }] = split(definition.parse, 'parse')

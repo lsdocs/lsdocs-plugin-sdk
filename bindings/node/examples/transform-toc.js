@@ -75,12 +75,25 @@ function linkList(items) {
   }
 }
 
+// Its settings are lsdocs' own plugin's: `.config/lsdocs/<name>/settings.toml`.
+const SETTINGS = 'lsdocs/{name}/settings.toml'
+
+/**
+ * The `depth` in a settings file's text (one `depth = N` line).
+ * @param {string | null | undefined} text
+ */
+function depthIn(text) {
+  const match = /^\s*depth\s*=\s*(\d+)\s*$/m.exec(text ?? '')
+  return match ? Number(match[1]) : 3
+}
+
 const plugin = definePlugin({
   name: 'transform-toc-js',
   version: '0.1.0',
+  configFiles: [SETTINGS],
 
   read(params, ctx) {
-    const depth = ctx.options?.depth ?? 3
+    const depth = depthIn(ctx.settings[SETTINGS.replace('{name}', ctx.config.name)])
     return { sections: entries(params.document.children, depth) }
   },
 

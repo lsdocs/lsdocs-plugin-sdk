@@ -2,6 +2,9 @@
 
 // The plugin API, exercised in-process through @lsdocs/plugin/testing.
 
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const { definePlugin, PROTOCOL_VERSION } = require('..')
@@ -115,21 +118,24 @@ test('renderAll returns extra files', async () => {
   assert.throws(() => definePlugin({ name: 'x', renderAll: () => [] }), /renderAll needs render/)
 })
 
-test('context options, progress and diagnostics', async () => {
+test('context settings, progress and diagnostics', async () => {
   const plugin = definePlugin({
     name: 'ctx',
     transform(params, ctx) {
       ctx.progress('halfway', 50)
       ctx.diagnostic({ severity: 'warning', message: 'careful', code: 'x' })
-      ctx.log('debug', `depth=${ctx.options.depth}`)
+      ctx.log('debug', `depth=${ctx.settings.depth} name=${ctx.config.name}`)
       return params.document
     },
   })
-  const { events } = await testing.apply(plugin, doc(), null, { options: { depth: 2 } })
+  const { events } = await testing.apply(plugin, doc(), null, {
+    settings: { depth: 2 },
+    config: { dir: '/c', name: 't' },
+  })
   assert.deepEqual(events, [
     { kind: 'progress', message: 'halfway', percentage: 50 },
     { kind: 'diagnostics', diagnostics: [{ severity: 'warning', message: 'careful', code: 'x' }] },
-    { kind: 'log', level: 'debug', message: 'depth=2' },
+    { kind: 'log', level: 'debug', message: 'depth=2 name=t' },
   ])
 })
 
@@ -161,4 +167,27 @@ test('bad definitions are rejected', () => {
 test('bad log level', async () => {
   const plugin = definePlugin({ name: 'bad', transform: (_p, ctx) => ctx.log('loud', 'x') })
   await assert.rejects(testing.apply(plugin, doc()), /unknown log level "loud"/)
+})
+
+test('config files are read when the session starts', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lsdocs-node-config-'))
+  fs.mkdirSync(path.join(dir, 'acme', 't'), { recursive: true })
+  fs.writeFileSync(path.join(dir, 'acme', 't', 'settings.toml'), 'depth = 4\n')
+  const plugin = definePlugin({
+    name: 'cfg',
+    configFiles: ['acme/{name}/settings.toml', 'acme/{name}/x.ini'],
+    transform(params, ctx) {
+      ctx.log('info', JSON.stringify(ctx.settings))
+      return params.document
+    },
+  })
+  const config = { dir, name: 't' }
+  const { result } = await testing.call(plugin, 'initialize', {}, { config })
+  assert.deepEqual(result.config_files, ['acme/t/settings.toml', 'acme/t/x.ini'])
+  const { events } = await testing.apply(plugin, doc(), null, { config })
+  fs.rmSync(dir, { recursive: true, force: true })
+  assert.deepEqual(JSON.parse(events[0].message), {
+    'acme/t/settings.toml': 'depth = 4\n',
+    'acme/t/x.ini': null,
+  })
 })

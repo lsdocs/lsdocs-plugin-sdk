@@ -16,8 +16,10 @@ const native = require('./native.js')
 
 const json = (value) => (value === undefined ? undefined : JSON.stringify(value))
 
-async function call(plugin, method, params = null, { site, options } = {}) {
-  const reply = JSON.parse(await native.call(plugin.native, method, JSON.stringify(params), json(site), json(options)))
+async function call(plugin, method, params = null, { site, settings, config } = {}) {
+  const reply = JSON.parse(
+    await native.call(plugin.native, method, JSON.stringify(params), json(site), json(settings), json(config)),
+  )
   const toBuffer = (value) => {
     if (Array.isArray(value?.output)) value.output = Buffer.from(value.output)
   }

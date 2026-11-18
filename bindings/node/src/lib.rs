@@ -5,12 +5,12 @@
 //!
 //! - `NativePlugin`: a plugin definition holding JS handler functions.
 //! - `serve(plugin)`: runs the plugin until the host is done (a Promise).
-//! - `call(plugin, method, params, site, options)`: runs one handler
+//! - `call(plugin, method, params, site, settings, config)`: runs one handler
 //!   in-process with a fake host, for tests (a Promise).
 //!
 //! Values cross between JS and Rust as JSON strings. `index.js` wraps each
 //! user handler as `(input: string) => Promise<string>`, where `input` is
-//! `{"params", "site", "options"}` and the reply is
+//! `{"params", "site", "settings", "config"}` and the reply is
 //! `{"result", "events"}` or `{"error", "events"}`. Events (log lines,
 //! progress, diagnostics) recorded during the call are sent to the host once
 //! the handler finishes.
@@ -78,7 +78,8 @@ fn js_handler(tsfn: JsHandler) -> Handler {
                 let input = serde_json::json!({
                     "params": params,
                     "site": ctx.site(),
-                    "options": ctx.settings(),
+                    "settings": ctx.settings(),
+                    "config": ctx.config(),
                 })
                 .to_string();
                 let promise = tsfn
@@ -134,12 +135,18 @@ pub struct NativePlugin {
 impl NativePlugin {
     /// A plugin with no handlers yet; `max_concurrency` defaults to 1.
     #[napi(constructor)]
-    pub fn new(name: String, version: String, max_concurrency: Option<u32>) -> Self {
+    pub fn new(
+        name: String,
+        version: String,
+        max_concurrency: Option<u32>,
+        config_files: Option<Vec<String>>,
+    ) -> Self {
         Self {
             inner: DynamicPlugin {
                 name,
                 version,
                 max_concurrency: Some(max_concurrency.unwrap_or(1)),
+                config_files: config_files.unwrap_or_default(),
                 ..DynamicPlugin::default()
             },
         }
@@ -256,7 +263,8 @@ pub fn call<'env>(
     method: String,
     params: String,
     site: Option<String>,
-    options: Option<String>,
+    settings: Option<String>,
+    config: Option<String>,
 ) -> Result<PromiseRaw<'env, String>> {
     let parse = |what: &str, json: Option<String>| -> Result<Value> {
         match json {
@@ -271,13 +279,23 @@ pub fn call<'env>(
         Value::Null => SiteInfo::default(),
         v => serde_json::from_value(v).map_err(|e| to_napi(format!("invalid site: {e}")))?,
     };
+    let config: lsdocs_plugin_sdk::protocol::ConfigInfo = match parse("config", config)? {
+        Value::Null => Default::default(),
+        v => serde_json::from_value(v).map_err(|e| to_napi(format!("invalid config: {e}")))?,
+    };
     let init = InitializeParams {
         protocol_version: VERSION.into(),
         site,
+        config,
         ..InitializeParams::default()
     };
-    let setup = lsdocs_plugin_sdk::Setup::with_settings(init, parse("options", options)?);
     let plugin = plugin.inner.clone().into_plugin();
+    // Settings given are used as they are; otherwise the plugin reads its
+    // `config_files`, as it would at `initialize`.
+    let setup = match settings {
+        Some(json) => lsdocs_plugin_sdk::Setup::with_settings(init, parse("settings", Some(json))?),
+        None => plugin.setup(&init).map_err(to_napi)?,
+    };
     env.spawn_future(async move {
         let recorder = Arc::new(Recorder::default());
         let ctx = Context::new(recorder.clone(), &setup);
