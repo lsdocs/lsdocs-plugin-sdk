@@ -15,9 +15,9 @@ class Context:
         source directory)."""
 
     @property
-    def settings(self) -> dict[str, str | None]:
+    def settings(self) -> dict[str, str | None] | None:
         """Each of the plugin's ``config_files`` (``{name}`` resolved)
-        mapped to its text, or None if missing."""
+        mapped to its text, or None if missing; None if it names none."""
 
     @property
     def config(self) -> dict[str, str]:

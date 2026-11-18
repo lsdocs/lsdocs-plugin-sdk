@@ -93,7 +93,7 @@ const plugin = definePlugin({
   configFiles: [SETTINGS],
 
   read(params, ctx) {
-    const depth = depthIn(ctx.settings[SETTINGS.replace('{name}', ctx.config.name)])
+    const depth = depthIn(ctx.settings?.[SETTINGS.replace('{name}', ctx.config.name)])
     return { sections: entries(params.document.children, depth) }
   },
 

@@ -64,18 +64,73 @@ pub fn settings_toml_as<T: serde::de::DeserializeOwned + Default>(
     Ok(loaded)
 }
 
-/// [`settings_toml`], with only `keys` allowed (any other is an error
-/// naming the file): a loader for plugins reading a few keys.
-pub fn settings_toml_keys(config: &ConfigInfo, keys: &[&str]) -> Result<Loaded, String> {
+/// What a setting's value must be (see [`settings_toml_keys`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// `true` or `false`.
+    Bool,
+    /// A whole number.
+    Integer,
+    /// A string.
+    String,
+    /// An array.
+    Array,
+    /// A table.
+    Table,
+    /// Anything.
+    Any,
+}
+
+impl Kind {
+    fn accepts(self, value: &Value) -> bool {
+        match self {
+            Kind::Bool => value.is_boolean(),
+            Kind::Integer => value.is_i64() || value.is_u64(),
+            Kind::String => value.is_string(),
+            Kind::Array => value.is_array(),
+            Kind::Table => value.is_object(),
+            Kind::Any => true,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Kind::Bool => "a boolean",
+            Kind::Integer => "an integer",
+            Kind::String => "a string",
+            Kind::Array => "an array",
+            Kind::Table => "a table",
+            Kind::Any => "a value",
+        }
+    }
+}
+
+/// [`settings_toml`], with only `keys` allowed, each of its kind (any
+/// other key, or a value of another kind, is an error naming the file): a
+/// loader for plugins reading a few keys.
+pub fn settings_toml_keys(config: &ConfigInfo, keys: &[(&str, Kind)]) -> Result<Loaded, String> {
     let loaded = settings_toml(config)?;
-    if let Value::Object(table) = &loaded.settings
-        && let Some(unknown) = table.keys().find(|k| !keys.contains(&k.as_str()))
-    {
-        return Err(format!(
-            "{}: unknown setting `{unknown}` (known: {})",
-            shown(config, &loaded),
-            keys.join(", ")
-        ));
+    if let Value::Object(table) = &loaded.settings {
+        for (name, value) in table {
+            match keys.iter().find(|(k, _)| k == name) {
+                None => {
+                    let known: Vec<&str> = keys.iter().map(|(k, _)| *k).collect();
+                    return Err(format!(
+                        "{}: unknown setting `{name}` (known: {})",
+                        shown(config, &loaded),
+                        known.join(", ")
+                    ));
+                }
+                Some((_, kind)) if !kind.accepts(value) => {
+                    return Err(format!(
+                        "{}: `{name}` must be {}",
+                        shown(config, &loaded),
+                        kind.name()
+                    ));
+                }
+                Some(_) => {}
+            }
+        }
     }
     Ok(loaded)
 }
@@ -136,7 +191,7 @@ mod tests {
         };
         std::fs::create_dir_all(dir.join("lsdocs/y")).unwrap();
         std::fs::write(dir.join("lsdocs/y/settings.toml"), "depht = 2\n").unwrap();
-        let err = settings_toml_keys(&config, &["depth"]).unwrap_err();
+        let err = settings_toml_keys(&config, &[("depth", Kind::Integer)]).unwrap_err();
         #[derive(serde::Deserialize, Default)]
         #[serde(deny_unknown_fields)]
         #[allow(dead_code)]
@@ -153,5 +208,27 @@ mod tests {
             typed.contains("settings.toml") && typed.contains("depht"),
             "{typed}"
         );
+    }
+
+    #[test]
+    fn wrong_types_name_the_file() {
+        let dir = std::env::temp_dir().join(format!("lsdocs-config-t-{}", std::process::id()));
+        let config = ConfigInfo {
+            dir: dir.to_string_lossy().into_owned(),
+            name: "z".into(),
+        };
+        std::fs::create_dir_all(dir.join("lsdocs/z")).unwrap();
+        let file = dir.join("lsdocs/z/settings.toml");
+        let keys = [("anchors", Kind::Bool), ("depth", Kind::Integer)];
+        std::fs::write(&file, "anchors = \"no\"\n").unwrap();
+        let err = settings_toml_keys(&config, &keys).unwrap_err();
+        std::fs::write(&file, "anchors = false\ndepth = 2\n").unwrap();
+        let ok = settings_toml_keys(&config, &keys);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            err.contains("settings.toml") && err.contains("`anchors`") && err.contains("a boolean"),
+            "{err}"
+        );
+        assert!(ok.is_ok(), "{ok:?}");
     }
 }

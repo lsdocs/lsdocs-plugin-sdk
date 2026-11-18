@@ -93,7 +93,7 @@ export interface Context {
    * The plugin's settings: each of its `configFiles` (`{name}` resolved)
    * mapped to its text, or null if missing.
    */
-  readonly settings: Record<string, string | null>
+  readonly settings: Record<string, string | null> | null
   /** `dir` (the site's `.config/`) and `name` (the plugin's name in the site config). */
   readonly config: { dir: string; name: string }
   log(level: 'error' | 'warn' | 'info' | 'debug' | 'trace', message: string): void
