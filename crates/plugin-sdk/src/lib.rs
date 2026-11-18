@@ -629,6 +629,7 @@ pub trait EventSink: Send + Sync + 'static {
 pub struct Context {
     events: Arc<dyn EventSink>,
     site: Arc<SiteInfo>,
+    config: Arc<ConfigInfo>,
     settings: Arc<Value>,
 }
 
@@ -647,6 +648,7 @@ impl Context {
         Self {
             events,
             site: Arc::new(setup.params.site.clone()),
+            config: Arc::new(setup.params.config.clone()),
             settings: Arc::new(setup.settings.clone()),
         }
     }
@@ -654,6 +656,12 @@ impl Context {
     /// The site being built.
     pub fn site(&self) -> &SiteInfo {
         &self.site
+    }
+
+    /// Where the plugin's settings are: the site's `.config/` directory
+    /// and the plugin's name in the site config.
+    pub fn config(&self) -> &ConfigInfo {
+        &self.config
     }
 
     /// The plugin's settings, as its loader read them (null if none; see

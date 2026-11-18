@@ -115,21 +115,21 @@ def test_render_all_returns_extra_files():
     }
 
 
-def test_context_options_progress_and_diagnostics():
+def test_context_settings_progress_and_diagnostics():
     plugin = Plugin("ctx")
 
     @plugin.transform()
     def apply(params, ctx):
         ctx.progress("halfway", 50)
         ctx.diagnostic({"severity": "warning", "message": "careful", "code": "x"})
-        ctx.log("debug", f"depth={ctx.options['depth']}")
+        ctx.log("debug", f"depth={ctx.settings['depth']} name={ctx.config['name']}")
         return params["document"]
 
-    _, events = testing.apply(plugin, doc(), options={"depth": 2})
+    _, events = testing.apply(plugin, doc(), settings={"depth": 2}, config={"dir": "/c", "name": "t"})
     assert events == [
         {"kind": "progress", "message": "halfway", "percentage": 50},
         {"kind": "diagnostics", "diagnostics": [{"severity": "warning", "message": "careful", "code": "x"}]},
-        {"kind": "log", "level": "debug", "message": "depth=2"},
+        {"kind": "log", "level": "debug", "message": "depth=2 name=t"},
     ]
 
 
@@ -280,3 +280,21 @@ def test_async_calls_overlap_and_release_the_gil():
     elapsed = time.perf_counter() - start
     assert len(results) == 2
     assert elapsed < 0.55, f"two 0.3 s handlers took {elapsed:.2f} s; they did not overlap"
+
+
+def test_config_files_are_read_at_initialize(tmp_path):
+    settings = tmp_path / "acme" / "t" / "settings.toml"
+    settings.parent.mkdir(parents=True)
+    settings.write_bytes(b"depth = 4\n")
+    plugin = Plugin("cfg", "1.0", config_files=["acme/{name}/settings.toml", "acme/{name}/x.ini"])
+
+    @plugin.transform(nodes=["text"])
+    def apply(params, ctx):
+        ctx.info(repr(ctx.settings))
+        return params["document"]
+
+    config = {"dir": str(tmp_path), "name": "t"}
+    result, _ = testing.call(plugin, "initialize", {}, config=config)
+    assert result["config_files"] == ["acme/t/settings.toml", "acme/t/x.ini"]
+    _, events = testing.apply(plugin, doc(), config=config)
+    assert events[0]["message"] == repr({"acme/t/settings.toml": "depth = 4\n", "acme/t/x.ini": None})

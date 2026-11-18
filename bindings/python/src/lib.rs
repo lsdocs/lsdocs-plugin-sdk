@@ -135,13 +135,19 @@ struct NativePlugin {
 #[pymethods]
 impl NativePlugin {
     #[new]
-    #[pyo3(signature = (name, version, max_concurrency = Some(1)))]
-    fn new(name: String, version: String, max_concurrency: Option<u32>) -> Self {
+    #[pyo3(signature = (name, version, max_concurrency = Some(1), config_files = Vec::new()))]
+    fn new(
+        name: String,
+        version: String,
+        max_concurrency: Option<u32>,
+        config_files: Vec<String>,
+    ) -> Self {
         Self {
             inner: DynamicPlugin {
                 name,
                 version,
                 max_concurrency,
+                config_files,
                 ..DynamicPlugin::default()
             },
         }
@@ -211,10 +217,20 @@ impl PyContext {
         to_py(py, &site)
     }
 
-    /// The plugin's `options` from the site config (None if absent).
+    /// The plugin's settings: each of its `config_files` (as resolved)
+    /// mapped to its text, or None if missing.
     #[getter]
-    fn options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    fn settings<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         to_py(py, self.ctx.settings())
+    }
+
+    /// Where the settings are: `dir` (the site's `.config/`) and `name`
+    /// (the plugin's name in the site config).
+    #[getter]
+    fn config<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let config = serde_json::to_value(self.ctx.config())
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        to_py(py, &config)
     }
 
     /// Sends a log line: level is "error", "warn", "info", "debug" or "trace".
@@ -322,14 +338,15 @@ fn decode<T: serde::de::DeserializeOwned>(method: &str, value: Value) -> Result<
 /// Calls one of the plugin's handlers in-process, as the host would, and
 /// returns `(result, events)`. For tests; see `lsdocs_plugin.testing`.
 #[pyfunction]
-#[pyo3(signature = (plugin, method, params = None, site = None, options = None))]
+#[pyo3(signature = (plugin, method, params = None, site = None, settings = None, config = None))]
 fn call<'py>(
     py: Python<'py>,
     plugin: &NativePlugin,
     method: &str,
     params: Option<Bound<'py, PyAny>>,
     site: Option<Bound<'py, PyAny>>,
-    options: Option<Bound<'py, PyAny>>,
+    settings: Option<Bound<'py, PyAny>>,
+    config: Option<Bound<'py, PyAny>>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let params = match params {
         Some(p) => to_value(&p)?,
@@ -340,17 +357,24 @@ fn call<'py>(
             .map_err(|e| PyValueError::new_err(format!("invalid site: {e}")))?,
         None => SiteInfo::default(),
     };
-    let options = match options {
-        Some(o) => to_value(&o)?,
-        None => Value::Null,
+    let config: lsdocs_plugin_sdk::protocol::ConfigInfo = match config {
+        Some(c) => serde_json::from_value(to_value(&c)?)
+            .map_err(|e| PyValueError::new_err(format!("invalid config: {e}")))?,
+        None => Default::default(),
     };
     let init = InitializeParams {
         protocol_version: PROTOCOL_VERSION.into(),
         site,
+        config,
         ..InitializeParams::default()
     };
-    let setup = lsdocs_plugin_sdk::Setup::with_settings(init, options);
     let plugin = plugin.inner.clone().into_plugin();
+    // Settings given are used as they are; otherwise the plugin reads its
+    // `config_files`, as it would at `initialize`.
+    let setup = match settings {
+        Some(s) => lsdocs_plugin_sdk::Setup::with_settings(init, to_value(&s)?),
+        None => plugin.setup(&init).map_err(PyRuntimeError::new_err)?,
+    };
     let recorder = Arc::new(Recorder::default());
     let ctx = Context::new(recorder.clone(), &setup);
     let method_name = method.to_owned();

@@ -4,7 +4,7 @@ Collects each document's section tree, then inserts a nested list of links
 to the sections into the document's first section, right after its title.
 The first section is taken as the page title, so the list holds its
 subsections followed by any later top-level sections. Documents with
-nothing to list are left alone. Option ``depth`` (default 3) is the deepest
+nothing to list are left alone. The setting ``depth`` (default 3) is the deepest
 heading level listed.
 
 Its output must match the Rust plugin exactly; see tests/test_toc_port.py.
@@ -12,11 +12,14 @@ Its output must match the Rust plugin exactly; see tests/test_toc_port.py.
 
 from __future__ import annotations
 
+import tomllib
 from typing import Any
 
 from lsdocs_plugin import Context, Plugin
 
-plugin = Plugin("transform-toc-py", "0.1.0")
+# Its settings are lsdocs' own plugin's: `.config/lsdocs/<name>/settings.toml`.
+SETTINGS = "lsdocs/{name}/settings.toml"
+plugin = Plugin("transform-toc-py", "0.1.0", config_files=[SETTINGS])
 
 Node = dict[str, Any]
 
@@ -58,8 +61,9 @@ def entries(nodes: list[Node], depth: int) -> list[dict[str, Any]]:
 
 @plugin.read
 def read(params: dict[str, Any], ctx: Context) -> Any:
-    options = ctx.options or {}
-    return {"sections": entries(params["document"]["children"], options.get("depth", 3))}
+    text = ctx.settings.get(SETTINGS.format(name=ctx.config["name"]))
+    settings = tomllib.loads(text) if text else {}
+    return {"sections": entries(params["document"]["children"], settings.get("depth", 3))}
 
 
 def link_list(items: list[dict[str, Any]]) -> Node:

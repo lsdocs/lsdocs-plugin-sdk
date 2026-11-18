@@ -40,7 +40,6 @@ builtin = "parser-markdown"
 
 [[plugins]]
 name = "toc"
-options = {{ depth = 3 }}
 {toc_plugin}
 
 [[plugins]]
@@ -53,6 +52,10 @@ def build(tmp_path: Path, label: str, toc_plugin: str, env: dict[str, str] | Non
     site = tmp_path / label
     site.mkdir()
     (site / "lsdocs.toml").write_text(config(toc_plugin), encoding="utf-8")
+    # Not the default depth (3), so the port must read its settings.
+    settings = site / ".config" / "lsdocs" / "toc" / "settings.toml"
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_bytes(b"depth = 2\n")
     proc = subprocess.run(
         [LSDOCS, "build", "--config", str(site / "lsdocs.toml")],
         capture_output=True,

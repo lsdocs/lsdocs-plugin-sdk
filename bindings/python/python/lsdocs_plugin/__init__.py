@@ -56,10 +56,17 @@ F = TypeVar("F", bound=Handler)
 class Plugin:
     """An lsdocs plugin: a name, a version and its handlers."""
 
-    def __init__(self, name: str, version: str = "0.0.0", *, max_concurrency: int = 1) -> None:
+    def __init__(
+        self,
+        name: str,
+        version: str = "0.0.0",
+        *,
+        max_concurrency: int = 1,
+        config_files: Iterable[str] = (),
+    ) -> None:
         self.name = name
         self.version = version
-        self._native = _native.NativePlugin(name, version, max_concurrency)
+        self._native = _native.NativePlugin(name, version, max_concurrency, list(config_files))
 
     def parse(self, *, extensions: Iterable[str]) -> Callable[[F], F]:
         """Registers the parser for files with these extensions (no dot)."""

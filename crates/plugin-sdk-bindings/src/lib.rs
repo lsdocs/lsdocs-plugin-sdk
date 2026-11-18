@@ -58,6 +58,12 @@ pub struct DynamicPlugin {
     pub render: Option<(Vec<String>, Handler)>,
     /// The `render/transform/all` handler; only used with `render`.
     pub render_all: Option<Handler>,
+    /// The settings files the plugin reads, relative to `.config/`, with
+    /// `{name}` standing for its name in the site config
+    /// (`lsdocs/{name}/settings.toml`). They are read at `initialize`; the
+    /// settings are a map from each file (as resolved) to its text, or
+    /// null if it is missing, for the plugin to parse in its own format.
+    pub config_files: Vec<String>,
 }
 
 impl fmt::Debug for DynamicPlugin {
@@ -70,6 +76,7 @@ impl fmt::Debug for DynamicPlugin {
             .field("apply", &self.apply.as_ref().map(|(n, _)| n))
             .field("render", &self.render.as_ref().map(|(f, _)| f))
             .field("render_all", &self.render_all.is_some())
+            .field("config_files", &self.config_files)
             .finish()
     }
 }
@@ -78,6 +85,10 @@ impl DynamicPlugin {
     /// Builds the SDK plugin.
     pub fn into_plugin(self) -> Plugin {
         let mut plugin = Plugin::new(self.name, self.version);
+        if !self.config_files.is_empty() {
+            let templates = self.config_files;
+            plugin = plugin.settings(move |config| read_config_files(config, &templates));
+        }
         if let Some(n) = self.max_concurrency {
             plugin = plugin.max_concurrency(n);
         }
@@ -110,6 +121,31 @@ impl DynamicPlugin {
         }
         plugin
     }
+}
+
+/// Reads the settings files `templates` name (see
+/// [`DynamicPlugin::config_files`]) as text.
+fn read_config_files(
+    config: &lsdocs_plugin_sdk::protocol::ConfigInfo,
+    templates: &[String],
+) -> Result<lsdocs_plugin_sdk::config::Loaded, String> {
+    let mut settings = serde_json::Map::new();
+    let mut files = Vec::new();
+    for template in templates {
+        let relative = template.replace("{name}", &config.name);
+        let path = std::path::Path::new(&config.dir).join(&relative);
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => Value::String(text),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Value::Null,
+            Err(e) => return Err(format!("cannot read {}: {e}", path.display())),
+        };
+        settings.insert(relative.clone(), text);
+        files.push(relative);
+    }
+    Ok(lsdocs_plugin_sdk::config::Loaded {
+        settings: Value::Object(settings),
+        files,
+    })
 }
 
 /// Calls a handler with typed params and decodes its typed result, after
@@ -363,6 +399,7 @@ mod tests {
             name: "dyn".into(),
             version: "1.0.0".into(),
             max_concurrency: Some(1),
+            config_files: Vec::new(),
             parse: Some((
                 vec!["txt".into()],
                 // Returns just a document, without `source`.
@@ -395,6 +432,32 @@ mod tests {
             )),
             render_all: None,
         }
+    }
+
+    #[test]
+    fn config_files_are_read_as_text() {
+        let dir = std::env::temp_dir().join(format!("lsdocs-dyn-config-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("acme/t")).unwrap();
+        std::fs::write(dir.join("acme/t/a.toml"), "x = 1\n").unwrap();
+        let plugin = DynamicPlugin {
+            config_files: vec!["acme/{name}/a.toml".into(), "acme/{name}/b.ini".into()],
+            ..sample()
+        }
+        .into_plugin();
+        let params = InitializeParams {
+            config: lsdocs_plugin_sdk::protocol::ConfigInfo {
+                dir: dir.to_string_lossy().into_owned(),
+                name: "t".into(),
+            },
+            ..InitializeParams::default()
+        };
+        let setup = plugin.setup(&params).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            setup.settings,
+            json!({"acme/t/a.toml": "x = 1\n", "acme/t/b.ini": null})
+        );
+        assert_eq!(setup.config_files, ["acme/t/a.toml", "acme/t/b.ini"]);
     }
 
     #[test]

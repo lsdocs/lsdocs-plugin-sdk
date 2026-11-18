@@ -25,12 +25,16 @@ def call(
     params: dict[str, Any] | None = None,
     *,
     site: dict[str, Any] | None = None,
-    options: Any = None,
+    settings: Any = None,
+    config: dict[str, str] | None = None,
 ) -> Result:
     """Calls ``method`` (``"parse"``, ``"parse/transform/each"``,
     ``"render/transform/each"``, ``"render"``, ``"render/transform/all"`` or
-    ``"initialize"``) with ``params``."""
-    return _native.call(plugin._native, method, params, site, options)
+    ``"initialize"``) with ``params``. ``settings`` are given to the
+    handler as ``ctx.settings``; without them, the plugin's
+    ``config_files`` are read from ``config["dir"]`` (``config`` is
+    ``ctx.config``: ``dir`` and ``name``)."""
+    return _native.call(plugin._native, method, params, site, settings, config)
 
 
 def parse(plugin: Plugin, source: str, text: str, **kwargs: Any) -> Result:

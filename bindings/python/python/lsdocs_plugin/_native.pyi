@@ -15,8 +15,14 @@ class Context:
         source directory)."""
 
     @property
-    def options(self) -> Any:
-        """The plugin's ``options`` from the site config (None if absent)."""
+    def settings(self) -> dict[str, str | None]:
+        """Each of the plugin's ``config_files`` (``{name}`` resolved)
+        mapped to its text, or None if missing."""
+
+    @property
+    def config(self) -> dict[str, str]:
+        """``dir`` (the site's ``.config/``) and ``name`` (the plugin's
+        name in the site config)."""
 
     def log(self, level: str, message: str) -> None:
         """Logs at ``"error"``, ``"warn"``, ``"info"``, ``"debug"`` or ``"trace"``."""
@@ -30,7 +36,13 @@ class Context:
         ``source``, ``span`` and ``code``."""
 
 class NativePlugin:
-    def __init__(self, name: str, version: str, max_concurrency: int | None = 1) -> None: ...
+    def __init__(
+        self,
+        name: str,
+        version: str,
+        max_concurrency: int | None = 1,
+        config_files: list[str] = ...,
+    ) -> None: ...
     def set_parse(self, extensions: list[str], func: Callable[..., Any]) -> None: ...
     def set_read(self, func: Callable[..., Any]) -> None: ...
     def set_apply(self, nodes: list[str], func: Callable[..., Any]) -> None: ...
@@ -44,5 +56,6 @@ def call(
     method: str,
     params: dict[str, Any] | None = None,
     site: dict[str, Any] | None = None,
-    options: Any = None,
+    settings: Any = None,
+    config: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]: ...
