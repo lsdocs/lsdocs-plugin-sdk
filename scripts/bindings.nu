@@ -15,7 +15,9 @@ export def protocol-fixtures []: nothing -> string {
 
 # The `lsdocs` binary for the end-to-end (toc port) tests: LSDOCS_BIN if
 # set; otherwise lsdocs installed from git into target/lsdocs-bin, with this
-# checkout's crates patched in so it runs the SDK under test.
+# checkout's crates patched in so it runs the SDK under test. `--force`:
+# cargo would otherwise keep an earlier install of the same lsdocs revision,
+# built with an older SDK (it does not track patches).
 export def lsdocs-bin []: nothing -> string {
     let given = $env | get -o LSDOCS_BIN
     if $given != null and $given != "" { return $given }
@@ -26,7 +28,7 @@ export def lsdocs-bin []: nothing -> string {
         [--config $"patch.'($org.ORG_URL)/lsdocs-plugin-sdk'.($name).path='($dir)'"]
     } | flatten
     with-env (org org-env) {
-        cargo install --quiet --locked --git $"($org.ORG_URL)/lsdocs" --root $root ...$patches lsdocs
+        cargo install --quiet --locked --force --git $"($org.ORG_URL)/lsdocs" --root $root ...$patches lsdocs
     }
     $root | path join bin (if $nu.os-info.name == "windows" { "lsdocs.exe" } else { "lsdocs" })
 }
