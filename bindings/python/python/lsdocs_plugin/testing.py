@@ -61,5 +61,5 @@ def render_all(
     plugin: Plugin, pages: list[dict[str, Any]], format: str = "html", **kwargs: Any
 ) -> Result:
     """Runs ``render/transform/all`` for ``pages`` (dicts with ``source``, ``path``
-    and optional ``metadata``). Each file's ``output`` is returned as bytes."""
+    and optional ``metadata`` and ``data``). Each file's ``output`` is returned as bytes."""
     return call(plugin, "render/transform/all", {"format": format, "pages": pages}, **kwargs)

@@ -114,7 +114,9 @@ class Plugin:
     def render_all(self, func: F) -> F:
         """Registers the ``render/transform/all`` handler, called once after
         every page is rendered with the list of rendered pages
-        (``{"format", "pages": [{"source", "path", "metadata"}]}``). It
+        (``{"format", "pages": [{"source", "path", "metadata", "data"}]}``,
+        ``data`` being what the page's render returned as ``data``, if
+        anything). It
         returns files no single page makes: ``{"files": [{"path", "output"}]}`` or just
         the list, each ``output`` a ``str`` or ``bytes``. Only used with a
         renderer (:meth:`render`)."""

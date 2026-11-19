@@ -101,7 +101,7 @@ mod tests {
             &lsdocs_protocol::RenderResult {
                 output: vec![0; 10],
                 extension: "html".into(),
-                diagnostics: vec![],
+                ..lsdocs_protocol::RenderResult::default()
             },
         )
         .unwrap();

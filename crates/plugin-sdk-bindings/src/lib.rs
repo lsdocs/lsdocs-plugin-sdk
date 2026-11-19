@@ -478,6 +478,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn render_data_passes_through() {
+        let plugin = DynamicPlugin {
+            render: Some((
+                vec!["txt".into()],
+                handler(|_, _| Ok(json!({"output": "x", "data": {"words": 1}}))),
+            )),
+            render_all: Some(handler(|params, _| {
+                let data = params["pages"][0]["data"].to_string();
+                Ok(json!([{"path": "data.txt", "output": data}]))
+            })),
+            ..sample()
+        }
+        .into_plugin();
+        let ctx = ctx();
+        let rendered = plugin
+            .render(
+                RenderParams {
+                    document: doc(),
+                    format: "txt".into(),
+                },
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert_eq!(rendered.data, json!({"words": 1}));
+        let result = plugin
+            .render_all(
+                RenderTransformAllParams {
+                    format: "txt".into(),
+                    pages: vec![lsdocs_plugin_sdk::protocol::RenderedPage {
+                        data: rendered.data,
+                        ..Default::default()
+                    }],
+                },
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.files[0].output, br#"{"words":1}"#);
+    }
+
+    #[tokio::test]
     async fn render_all_handlers() {
         use lsdocs_plugin_sdk::protocol::RenderedPage;
         let plugin = DynamicPlugin {

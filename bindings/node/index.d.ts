@@ -136,6 +136,8 @@ export interface RenderResult {
   output: string | Uint8Array
   extension?: string
   diagnostics?: Diagnostic[]
+  /** Data about the page, handed back in `renderAll`'s `pages` (cached with the page). */
+  data?: unknown
 }
 /** A page written by the render phase. */
 export interface RenderedPage {
@@ -143,6 +145,8 @@ export interface RenderedPage {
   /** Output path, relative to the output directory. */
   path: string
   metadata?: Record<string, unknown>
+  /** The `data` its render returned, if any. */
+  data?: unknown
 }
 export interface RenderAllParams {
   format: string
