@@ -1,11 +1,12 @@
 """A Python port of the first-party ``transform-toc`` plugin.
 
-Collects each document's section tree, then inserts a nested list of links
-to the sections into the document's first section, right after its title.
-The first section is taken as the page title, so the list holds its
-subsections followed by any later top-level sections. Documents with
-nothing to list are left alone. The setting ``depth`` (default 3) is the deepest
-heading level listed.
+Collects each document's section tree and writes it to the document's
+``toc`` metadata: ``[{id, title, level, children}]``. A first section with a
+level 1 heading is the page title and is left out. With the setting
+``inline = true`` it also inserts a nested list of links to the sections
+into the document's first section, right after its title. Documents with
+nothing to list are left alone. The setting ``depth`` (default 3) is the
+deepest heading level listed.
 
 Its output must match the Rust plugin exactly; see tests/test_toc_port.py.
 """
@@ -53,6 +54,7 @@ def entries(nodes: list[Node], depth: int) -> list[dict[str, Any]]:
             {
                 "id": node["id"],
                 "title": plain_text(heading.get("children", [])),
+                "level": heading["level"],
                 "children": entries(children[1:], depth),
             }
         )
@@ -95,9 +97,16 @@ def apply(params: dict[str, Any], ctx: Context) -> Node:
     collected = params.get("collected") or {}
     sections = (collected.get(document["source"]) or {}).get("sections", [])
     if sections:
-        items = sections[0]["children"] + sections[1:]
+        rest = sections[1:]
+        first = sections[0]
+        entries_ = (first["children"] if first["level"] == 1 else [first]) + rest
+        if entries_:
+            document.setdefault("metadata", {})["toc"] = entries_
+        text = ctx.settings.get(SETTINGS.format(name=ctx.config["name"]))
+        inline = (tomllib.loads(text) if text else {}).get("inline", False)
+        items = first["children"] + rest
         title = next((n for n in document["children"] if n["type"] == "section"), None)
-        if items and title is not None:
+        if inline and items and title is not None:
             children = title["children"]
             at = 1 if children and children[0]["type"] == "heading" else 0
             children.insert(at, {"type": "custom", "kind": "toc", "children": [link_list(items)]})

@@ -59,7 +59,7 @@ function build(tmp, label, tocPlugin, env = {}) {
   // Not the default depth (3), so the port must read its settings.
   const settings = path.join(site, '.config', 'lsdocs', 'toc')
   fs.mkdirSync(settings, { recursive: true })
-  fs.writeFileSync(path.join(settings, 'settings.toml'), 'depth = 2\n')
+  fs.writeFileSync(path.join(settings, 'settings.toml'), 'depth = 2\ninline = true\n')
   const proc = spawnSync(LSDOCS, ['build', '--config', path.join(site, 'lsdocs.toml')], {
     env: { ...process.env, ...env },
     encoding: 'utf8',

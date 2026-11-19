@@ -55,7 +55,7 @@ def build(tmp_path: Path, label: str, toc_plugin: str, env: dict[str, str] | Non
     # Not the default depth (3), so the port must read its settings.
     settings = site / ".config" / "lsdocs" / "toc" / "settings.toml"
     settings.parent.mkdir(parents=True, exist_ok=True)
-    settings.write_bytes(b"depth = 2\n")
+    settings.write_bytes(b"depth = 2\ninline = true\n")
     proc = subprocess.run(
         [LSDOCS, "build", "--config", str(site / "lsdocs.toml")],
         capture_output=True,
