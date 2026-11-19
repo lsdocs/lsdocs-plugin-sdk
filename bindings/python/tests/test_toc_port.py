@@ -76,7 +76,7 @@ def python_toc(transport: str) -> str:
 
 def test_python_port_matches_rust(tmp_path):
     rust = build(tmp_path, "rust", 'builtin = "transform-toc"')
-    assert b'<div class="toc">' in rust["index.html"]
+    assert b'<div class="lsd-toc">' in rust["index.html"]
 
     for transport in ("stdio", "pipe"):
         python = build(tmp_path, f"python-{transport}", python_toc(transport))

@@ -81,7 +81,7 @@ test('JS port matches the Rust transformer', { skip: !LSDOCS && 'LSDOCS_BIN is n
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lsdocs-node-'))
   try {
     const rust = build(tmp, 'rust', 'builtin = "transform-toc"')
-    assert.ok(rust['index.html'].includes('<div class="toc">'))
+    assert.ok(rust['index.html'].includes('<div class="lsd-toc">'))
 
     const command = `command = [${tomlStr(process.execPath)}, ${tomlStr(PORT)}]`
     for (const transport of ['stdio', 'pipe']) {
