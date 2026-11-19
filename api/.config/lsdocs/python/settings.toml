@@ -1,0 +1,3 @@
+paths = ["../bindings/python/python/lsdocs_plugin"]
+primary = true
+output = "python"
