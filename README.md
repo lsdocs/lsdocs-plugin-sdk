@@ -20,6 +20,7 @@ adapt idioms.
 
 - The Python and Node.js SDKs cannot declare syntax extensions (directives
   and roles); `Plugin::syntax` is Rust only.
+- The Python and Node.js SDKs cannot generate documents.
 - Node.js: context events (logs, progress, diagnostics) reach the host
   when the handler finishes, not as they happen.
 - Python and Node.js types (`TypedDict`s in `_native.pyi`, `index.d.ts`)
@@ -29,6 +30,8 @@ adapt idioms.
 ## TODO
 
 - [ ] Syntax declarations from Python and Node.js plugins.
+- [ ] Generated documents (`parse/transform/all`) from Python and Node.js
+      plugins (only the Rust SDK has `Transformer::conclude`).
 - [ ] Node.js: send context events as they happen.
 - [ ] `TypedDict`s (Python) and `.d.ts` types (Node.js) generated from
       lsdocs-protocol's `schema/`, and type-checked against its fixtures.
