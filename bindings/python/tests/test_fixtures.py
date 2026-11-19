@@ -6,12 +6,15 @@ arrays, or enums in an unexpected shape.
 """
 
 import json
+import os
 from pathlib import Path
 
 import msgpack
 import pytest
 
-FIXTURES = Path(__file__).resolve().parents[4] / "fixtures"
+# lsdocs-protocol's fixtures: `nur test python` sets LSDOCS_FIXTURES to
+# the checkout Cargo uses (the revision in Cargo.lock).
+FIXTURES = Path(os.environ.get("LSDOCS_FIXTURES", "fixtures"))
 FILES = sorted(FIXTURES.rglob("*.msgpack"))
 
 

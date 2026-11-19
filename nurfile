@@ -9,8 +9,10 @@ use scripts/org.nu
 def org-map []: nothing -> record { open scripts/org.nuon }
 
 # Runs cargo with `org-env` (local clones when LSDOCS_ORG_DIR is set).
+# PYO3_BUILD_EXTENSION_MODULE builds pyo3 crates as extension modules (no
+# libpython link), as maturin does, so plain cargo builds of them work.
 def --wrapped cargo-org [...args] {
-    with-env (org org-env) { ^cargo ...$args }
+    with-env ((org org-env) | insert PYO3_BUILD_EXTENSION_MODULE "1") { ^cargo ...$args }
 }
 
 # Format the Rust code (`--check` only checks).
@@ -79,11 +81,33 @@ def "nur bump" [crate?: string] {
     if $crate == null { cargo-org update } else { cargo-org update -p $crate }
 }
 
+# Builds the Python package (lsdocs-plugin) and runs its tests (needs uv).
+# The toc port test needs an `lsdocs` binary: LSDOCS_BIN, or lsdocs
+# installed from git with this checkout's SDK patched in.
+def "nur test python" [] {
+    use scripts/bindings.nu
+    bindings test-python {LSDOCS_BIN: (bindings lsdocs-bin), LSDOCS_FIXTURES: (bindings protocol-fixtures)}
+}
+
+# Builds the Node.js package (@lsdocs/plugin) and runs its tests.
+def "nur test node" [] {
+    use scripts/bindings.nu
+    bindings test-node lsdocs-plugin-node lsdocs_plugin_node lsdocs {LSDOCS_BIN: (bindings lsdocs-bin), LSDOCS_FIXTURES: (bindings protocol-fixtures)}
+}
+
+# Regenerates bindings/node/native.{js,d.ts} after changing its #[napi] API.
+def "nur gen node" [] {
+    use scripts/bindings.nu
+    bindings gen-node
+}
+
 # What CI runs.
 def "nur ci" [] {
     nur fmt --check
     nur lint
     nur test
+    nur test python
+    nur test node
     nur check-dupes
     nur check-git-deps
 }

@@ -43,3 +43,51 @@ shows them. `nur ci` runs what CI runs: run it before committing. Tools:
 - Licensing: `Apache-2.0 OR MIT`. Nothing is published.
 - Record what is left open in README.md's TODO section, and what the code
   does not do (or does differently) under Known limitations.
+
+## This repository
+
+| Path | What |
+|---|---|
+| `crates/rpc` | msgpack-rpc envelope, framing, `Peer`/`Router`/`Connection`, transports, stdout protection. |
+| `crates/plugin-sdk` | `Parser`/`Transformer`/`Renderer` traits, `Plugin`, `Context`, `serve()`/`main()`. |
+| `crates/plugin-sdk-bindings` | Value-based handlers -> SDK `Plugin`; shared by the bindings. |
+| `bindings/python` | `lsdocs-plugin`: pyo3 extension + Python package (`python/lsdocs_plugin`), pytest suite. |
+| `bindings/node` | `@lsdocs/plugin`: napi-rs addon + JS package (`index.js`, `index.d.ts`), `node:test` suite. |
+| `tests/site` | The site the toc ports render (both bindings' `examples/`). |
+
+Tasks: `nur test python` and `nur test node` build each package and run
+its tests; `nur gen node` regenerates `bindings/node/native.{js,d.ts}`
+after changing its `#[napi]` API (generated: never hand-edit them).
+`unsafe_code` is denied except the stdout-protection syscalls in
+`crates/rpc/src/transport.rs`.
+
+### Bindings
+
+- **All protocol behavior lives in Rust** (`rpc`, `plugin-sdk`,
+  `plugin-sdk-bindings`). Bindings only convert values and adapt idioms;
+  don't reimplement handshake, dispatch or capability logic in Python or
+  JS.
+- Python: handlers run on worker threads holding the GIL; `async def`
+  handlers run on one shared asyncio loop (`_aio.py`). `max_concurrency`
+  defaults to 1. Type stubs are hand-written (`_native.pyi`). A uv
+  workspace is rooted at `pyproject.toml` (lockfile and venv at the root;
+  `.venv` on Windows, `.venv-<os>` elsewhere).
+- Node: values cross as JSON strings; handlers are weak threadsafe
+  functions so they don't hold the event loop open. `index.d.ts` is
+  hand-written; napi only generates `native.d.ts`.
+- Each binding has a port of `transform-toc` (`examples/`) that must
+  render `tests/site` **byte-identically** to the Rust plugin
+  (lsdocs-transform-toc). Keep them in step when transform-toc changes.
+- The toc port tests need an `lsdocs` binary: `LSDOCS_BIN`, or the tasks
+  install lsdocs from git with this checkout's crates patched in. The
+  fixture tests read lsdocs-protocol's `fixtures/` from the checkout
+  Cargo uses (`LSDOCS_FIXTURES`, set by the tasks).
+- `nur test node` builds the addon with plain cargo and copies it (napi's
+  CLI fails on WSL's `/mnt/c`); run `nur gen node` on Windows or a native
+  Linux filesystem.
+
+### Testing gotchas
+
+- `crates/rpc/tests/suite.rs` spawns the `echo` example as a child
+  process. A filtered run (`cargo test --test suite`) does not rebuild
+  examples; run `cargo build -p lsdocs-rpc --examples` first, or `nur test`.

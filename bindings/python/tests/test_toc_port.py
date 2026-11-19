@@ -1,6 +1,6 @@
 """The Python port of transform-toc produces the same site as the Rust one.
 
-Builds examples/sample-site with the builtin Rust transformer, then with
+Builds tests/site (at the repository root) with the builtin Rust transformer, then with
 examples/transform_toc.py run out-of-process (over stdio and over a pipe),
 and compares every output file. Needs the `lsdocs` binary: set LSDOCS_BIN
 (`nur test python` does).
@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[4]
-SAMPLE_DOCS = ROOT / "examples" / "sample-site" / "docs"
+ROOT = Path(__file__).resolve().parents[3]
+SAMPLE_DOCS = ROOT / "tests" / "site"
 PORT = Path(__file__).resolve().parents[1] / "examples" / "transform_toc.py"
 LSDOCS = os.environ.get("LSDOCS_BIN")
 

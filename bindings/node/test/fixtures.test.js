@@ -10,7 +10,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { decode } = require('@msgpack/msgpack')
 
-const FIXTURES = path.resolve(__dirname, '../../../../fixtures')
+// lsdocs-protocol's fixtures: `nur test node` sets LSDOCS_FIXTURES to the
+// checkout Cargo uses (the revision in Cargo.lock).
+const FIXTURES = process.env.LSDOCS_FIXTURES || 'fixtures'
 
 function* files(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))

@@ -11,8 +11,8 @@ const os = require('node:os')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 
-const ROOT = path.resolve(__dirname, '../../../..')
-const SAMPLE_DOCS = path.join(ROOT, 'examples', 'sample-site', 'docs')
+const ROOT = path.resolve(__dirname, '../../..')
+const SAMPLE_DOCS = path.join(ROOT, 'tests', 'site')
 const PORT = path.resolve(__dirname, '..', 'examples', 'transform-toc.js')
 const LSDOCS = process.env.LSDOCS_BIN
 
