@@ -23,7 +23,7 @@ use lsdocs_plugin_sdk::protocol::{
     SiteInfo,
 };
 use lsdocs_plugin_sdk::{BoxFuture, Context, Event, EventSink, PluginError};
-use lsdocs_sdk_dynamic::{DynamicPlugin, Handler, Value};
+use lsdocs_plugin_sdk_bindings::{DynamicPlugin, Handler, Value};
 use napi::bindgen_prelude::{Function, Promise, PromiseRaw};
 use napi::threadsafe_function::ThreadsafeFunction;
 use napi::{Env, Error, Result, Status};

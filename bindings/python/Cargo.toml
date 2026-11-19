@@ -20,7 +20,7 @@ workspace = true
 
 [dependencies]
 lsdocs-plugin-sdk.workspace = true
-lsdocs-sdk-dynamic.workspace = true
+lsdocs-plugin-sdk-bindings.workspace = true
 pyo3.workspace = true
 pythonize.workspace = true
 serde.workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "lsdocs-sdk-dynamic"
+name = "lsdocs-plugin-sdk-bindings"
 description = "Value-based plugin handler adapter shared by the Python and Node bindings."
 version.workspace = true
 edition.workspace = true

@@ -21,7 +21,7 @@ use lsdocs_plugin_sdk::protocol::{
     SiteInfo,
 };
 use lsdocs_plugin_sdk::{BoxFuture, Context, Event, EventSink};
-use lsdocs_sdk_dynamic::{DynamicPlugin, Handler, Value};
+use lsdocs_plugin_sdk_bindings::{DynamicPlugin, Handler, Value};
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
