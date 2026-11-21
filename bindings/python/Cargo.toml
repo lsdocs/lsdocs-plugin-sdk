@@ -1,11 +1,12 @@
 [package]
 name = "lsdocs-plugin-python"
 description = "Python bindings (pyo3) for writing lsdocs plugins."
-version.workspace = true
+version = "0.1.0"
+publish = false
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-publish.workspace = true
+repository.workspace = true
 
 [lib]
 # Imported as `lsdocs_plugin._native`; see pyproject.toml.
