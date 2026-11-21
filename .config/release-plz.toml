@@ -26,3 +26,8 @@ version_group = "plugin-sdk"
 # Released (tagged, changelog) but not on crates.io; tracked by its tags.
 publish = false
 git_only = true
+
+# Dev tooling / internal to the bindings: never released.
+[[package]]
+name = "lsdocs-plugin-sdk-bindings"
+release = false
