@@ -1,0 +1,19 @@
+{
+  "name": "@lsdocs/plugin-darwin-x64",
+  "version": "0.1.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "lsdocs.darwin-x64.node",
+  "files": [
+    "lsdocs.darwin-x64.node"
+  ],
+  "description": "Write lsdocs plugins in JavaScript or TypeScript.",
+  "license": "Apache-2.0 OR MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "darwin"
+  ]
+}

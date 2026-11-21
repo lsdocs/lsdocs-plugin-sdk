@@ -1,0 +1,22 @@
+{
+  "name": "@lsdocs/plugin-linux-x64-musl",
+  "version": "0.1.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "lsdocs.linux-x64-musl.node",
+  "files": [
+    "lsdocs.linux-x64-musl.node"
+  ],
+  "description": "Write lsdocs plugins in JavaScript or TypeScript.",
+  "license": "Apache-2.0 OR MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "linux"
+  ],
+  "libc": [
+    "musl"
+  ]
+}

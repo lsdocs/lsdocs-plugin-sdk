@@ -1,0 +1,19 @@
+{
+  "name": "@lsdocs/plugin-win32-x64-msvc",
+  "version": "0.1.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "lsdocs.win32-x64-msvc.node",
+  "files": [
+    "lsdocs.win32-x64-msvc.node"
+  ],
+  "description": "Write lsdocs plugins in JavaScript or TypeScript.",
+  "license": "Apache-2.0 OR MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "win32"
+  ]
+}

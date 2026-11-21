@@ -1,0 +1,22 @@
+{
+  "name": "@lsdocs/plugin-linux-arm64-gnu",
+  "version": "0.1.0",
+  "cpu": [
+    "arm64"
+  ],
+  "main": "lsdocs.linux-arm64-gnu.node",
+  "files": [
+    "lsdocs.linux-arm64-gnu.node"
+  ],
+  "description": "Write lsdocs plugins in JavaScript or TypeScript.",
+  "license": "Apache-2.0 OR MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "linux"
+  ],
+  "libc": [
+    "glibc"
+  ]
+}

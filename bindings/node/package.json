@@ -21,8 +21,7 @@
     "testing.js",
     "testing.d.ts",
     "native.js",
-    "native.d.ts",
-    "*.node"
+    "native.d.ts"
   ],
   "engines": {
     "node": ">=20"
