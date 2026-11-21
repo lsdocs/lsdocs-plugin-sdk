@@ -10,6 +10,11 @@
   ],
   "description": "Write lsdocs plugins in JavaScript or TypeScript.",
   "license": "Apache-2.0 OR MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lsdocs/lsdocs-plugin-sdk.git",
+    "directory": "bindings/node"
+  },
   "engines": {
     "node": ">=20"
   },
