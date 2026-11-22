@@ -28,7 +28,6 @@ wheels = [
 
 [[package]]
 name = "lsdocs-plugin"
-version = "0.1.0"
 source = { editable = "bindings/python" }
 
 [package.dev-dependencies]

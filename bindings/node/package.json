@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "Write lsdocs plugins in JavaScript or TypeScript.",
   "license": "Apache-2.0 OR MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lsdocs/lsdocs-plugin-sdk.git",
+    "directory": "bindings/node"
+  },
   "main": "index.js",
   "types": "index.d.ts",
   "exports": {
@@ -21,8 +26,7 @@
     "testing.js",
     "testing.d.ts",
     "native.js",
-    "native.d.ts",
-    "*.node"
+    "native.d.ts"
   ],
   "engines": {
     "node": ">=20"
@@ -45,9 +49,12 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@msgpack/msgpack": "^3.1.3",
     "@napi-rs/cli": "^3.10.12",
     "@types/node": "^26.6.6",
+    "publint": "^0.3.25",
     "typescript": "^6.0.3"
-  }
+  },
+  "type": "commonjs"
 }
