@@ -2,6 +2,7 @@
 # (bindings/python, bindings/node). Used by the nurfile.
 
 use org.nu
+use org.nu run-cmd
 
 # The checkout of lsdocs-protocol Cargo builds against (the revision in
 # Cargo.lock, or a `nur link`ed one): its fixtures/ are what the bindings'
@@ -28,7 +29,7 @@ export def lsdocs-bin []: nothing -> string {
         [--config $"patch.'($org.ORG_URL)/lsdocs-plugin-sdk'.($name).path='($dir)'"]
     } | flatten
     with-env (org org-env) {
-        cargo install --quiet --locked --force --git $"($org.ORG_URL)/lsdocs" --root $root ...$patches lsdocs
+        run-cmd cargo install --quiet --locked --force --git $"($org.ORG_URL)/lsdocs" --root $root ...$patches lsdocs
     }
     $root | path join bin (if $nu.os-info.name == "windows" { "lsdocs.exe" } else { "lsdocs" })
 }
@@ -42,7 +43,7 @@ export def node-env []: nothing -> record {
     if (which mise | is-empty) {
         error make --unspanned {msg: "Node.js not found: install mise, then run `mise install`"}
     }
-    ^mise install --quiet node
+    run-cmd mise install --quiet node
     # A string: nur does not convert list-valued PATH for children.
     {PATH: (^mise env --json | from json | get PATH)}
 }
@@ -63,7 +64,7 @@ export def npm-install []: nothing -> nothing {
     let marker = "node_modules/.lsdocs-platform"
     let platform = $"($nu.os-info.name)-($nu.os-info.arch)"
     if not ($marker | path exists) or (open --raw $marker | str trim) != $platform {
-        npm ci --no-fund --no-audit --loglevel=error
+        run-cmd npm ci --no-fund --no-audit --loglevel=error
         $platform | save --force $marker
     }
 }
@@ -76,10 +77,10 @@ export def test-python [env_extra: record]: nothing -> nothing {
     let root = $env.PWD
     cd ($root | path join bindings python)
     with-env ((org org-env) | merge $env_extra | insert UV_PROJECT_ENVIRONMENT $venv) {
-        uv sync --quiet --group dev
+        run-cmd uv sync --quiet --group dev
         # Rebuild the extension so Rust changes are picked up.
-        uv run --quiet maturin develop --uv --quiet
-        uv run --quiet pytest -q
+        run-cmd uv run --quiet maturin develop --uv --quiet
+        run-cmd uv run --quiet pytest -q
     }
 }
 
@@ -89,7 +90,7 @@ export def test-python [env_extra: record]: nothing -> nothing {
 export def test-node [crate: string, lib: string, binary: string, env_extra: record]: nothing -> nothing {
     let root = $env.PWD
     let target = cargo metadata --format-version 1 --no-deps | from json | get target_directory
-    with-env ((org org-env) | insert PYO3_BUILD_EXTENSION_MODULE "1") { cargo build --quiet --package $crate }
+    with-env ((org org-env) | insert PYO3_BUILD_EXTENSION_MODULE "1") { run-cmd cargo build --quiet --package $crate }
     let dylib = $target | path join debug (match $nu.os-info.name {
         "windows" => $"($lib).dll"
         "macos" => $"lib($lib).dylib"
@@ -99,8 +100,8 @@ export def test-node [crate: string, lib: string, binary: string, env_extra: rec
     cp --force $dylib (node-addon-name $binary)
     with-env (node-env | merge $env_extra) {
         npm-install
-        npm run --silent typecheck
-        node --test test/
+        run-cmd npm run --silent typecheck
+        run-cmd node --test test/
     }
 }
 
@@ -110,6 +111,6 @@ export def gen-node []: nothing -> nothing {
     cd bindings/node
     with-env ((org org-env) | merge (node-env)) {
         npm-install
-        npm run --silent build
+        run-cmd npm run --silent build
     }
 }
