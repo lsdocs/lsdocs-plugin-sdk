@@ -56,10 +56,11 @@ shows them. `nur ci` runs what CI runs: run it before committing. Tools:
 | `crates/plugin-sdk-bindings` | Value-based handlers -> SDK `Plugin`; shared by the bindings. |
 | `bindings/python` | `lsdocs-plugin`: pyo3 extension + Python package (`python/lsdocs_plugin`), pytest suite. |
 | `bindings/node` | `@lsdocs/plugin`: napi-rs addon + JS package (`index.js`, `index.d.ts`), `node:test` suite. |
-| `tests/site` | The site the toc ports render (both bindings' `examples/`). |
+| `bindings/lua` | `lsdocs-plugin` for Lua: mlua module `lsdocs_plugin`, Lua specs (`spec/`) run in an embedded Lua, `lsdocs-lua` (a `lua` with the module built in). |
+| `tests/site` | The site the toc ports render (the bindings' `examples/`). |
 
-Tasks: `nur test python` and `nur test node` build each package and run
-its tests; `nur gen node` regenerates `bindings/node/native.{js,d.ts}`
+Tasks: `nur test python`, `nur test node` and `nur test lua` build each
+package and run its tests; `nur gen node` regenerates `bindings/node/native.{js,d.ts}`
 after changing its `#[napi]` API (generated: never hand-edit them).
 `unsafe_code` is denied except the stdout-protection syscalls in
 `crates/rpc/src/transport.rs`.
