@@ -1,0 +1,44 @@
+-- The rockspec template: lsdocs/.github's build-rocks.yml writes
+-- lsdocs-plugin-<version>-1.rockspec from it, @VERSION@ being the version of
+-- the lsdocs-plugin-lua crate.
+--
+-- It builds from source with cargo (luarocks-build-rust-mlua). Installing
+-- the prebuilt modules build-rocks.yml makes instead is not done yet (see
+-- README.md, TODO).
+rockspec_format = "3.0"
+package = "lsdocs-plugin"
+version = "@VERSION@-1"
+
+source = {
+  url = "git+https://github.com/lsdocs/lsdocs-plugin-sdk",
+  tag = "lsdocs-plugin-lua/v@VERSION@",
+}
+
+description = {
+  summary = "Write lsdocs plugins in Lua.",
+  detailed = [[
+The lsdocs plugin SDK for Lua: a plugin is Lua functions handling parse,
+transform and render requests; the protocol runs in Rust.
+]],
+  homepage = "https://github.com/lsdocs/lsdocs-plugin-sdk",
+  license = "Apache-2.0 OR MIT",
+}
+
+-- Lua 5.4 and LuaJIT (5.1 API).
+dependencies = {
+  "lua >= 5.1",
+}
+
+build_dependencies = {
+  "luarocks-build-rust-mlua",
+}
+
+build = {
+  type = "rust-mlua",
+  modules = {
+    -- require("lsdocs_plugin") <- the lsdocs_plugin_lua library.
+    ["lsdocs_plugin"] = "lsdocs_plugin_lua",
+  },
+  default_features = false,
+  features = { "module" },
+}

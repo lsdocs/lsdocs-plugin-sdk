@@ -35,3 +35,10 @@ git_only = true
 [[package]]
 name = "lsdocs-plugin-sdk-bindings"
 release = false
+
+[[package]]
+name = "lsdocs-plugin-lua"
+version_group = "plugin-sdk"
+# Released (tagged, changelog) but not on crates.io; tracked by its tags.
+publish = false
+git_only = true

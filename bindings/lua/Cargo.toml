@@ -1,0 +1,52 @@
+[package]
+name = "lsdocs-plugin-lua"
+description = "Lua bindings (mlua) for the lsdocs plugin SDK: write lsdocs plugins in Lua."
+version = "0.1.0"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# Not `lsdocs_plugin`: installed as lsdocs_plugin.{so,dll} (see the
+# rockspec), `require("lsdocs_plugin")` calls luaopen_lsdocs_plugin (built
+# with the `module` feature). The rlib is for the tests and lsdocs-lua
+# (src/bin), which embed a vendored Lua.
+name = "lsdocs_plugin_lua"
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[lints]
+workspace = true
+
+[features]
+# An embedded Lua 5.4, so `cargo build/test --workspace` needs no Lua
+# installed. A rock builds with `--no-default-features --features
+# <lua54|luajit>,module`.
+default = ["lua54", "vendored"]
+lua54 = ["mlua/lua54"]
+luajit = ["mlua/luajit"]
+vendored = ["mlua/vendored"]
+# A loadable module for an external interpreter (no Lua linked in).
+module = ["mlua/module"]
+
+# `nur msrv` checks each crate with `--no-default-features`; mlua needs a
+# Lua version.
+[package.metadata.msrv]
+features = ["lua54", "vendored"]
+
+[[bin]]
+# A `lua` with this module built in, for running Lua plugins without a Lua
+# installed (the toc port test). Not built for a rock (no `vendored`).
+name = "lsdocs-lua"
+required-features = ["vendored"]
+
+[dependencies]
+lsdocs-plugin-sdk.workspace = true
+lsdocs-plugin-sdk-bindings.workspace = true
+# Not `send` (it does not build in module mode); see src/lib.rs on threads.
+mlua = { workspace = true, features = ["serialize"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt", "time", "net", "io-util"] }
