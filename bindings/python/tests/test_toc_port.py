@@ -36,7 +36,7 @@ source_dir = {toml_str(SAMPLE_DOCS)}
 
 [[plugins]]
 name = "markdown"
-builtin = "parser-markdown"
+builtin = "parser-myst"
 
 [[plugins]]
 name = "toc"

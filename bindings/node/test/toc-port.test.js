@@ -29,7 +29,7 @@ function config(tocPlugin) {
     '',
     '[[plugins]]',
     'name = "markdown"',
-    'builtin = "parser-markdown"',
+    'builtin = "parser-myst"',
     '',
     '[[plugins]]',
     'name = "toc"',

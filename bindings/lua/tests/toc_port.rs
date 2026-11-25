@@ -31,7 +31,7 @@ source_dir = {}
 
 [[plugins]]
 name = "markdown"
-builtin = "parser-markdown"
+builtin = "parser-myst"
 
 [[plugins]]
 name = "toc"

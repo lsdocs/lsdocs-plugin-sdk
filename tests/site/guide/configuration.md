@@ -21,7 +21,7 @@ nav_order = 2
 ```toml
 [[plugins]]
 name = "markdown"
-builtin = "parser-markdown"
+builtin = "parser-myst"
 ```
 
 <details>
