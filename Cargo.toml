@@ -16,7 +16,7 @@ repository = "https://github.com/lsdocs/lsdocs-plugin-sdk"
 [workspace.dependencies]
 lsdocs-protocol = { git = "https://github.com/lsdocs/lsdocs-protocol", branch = "main", version = "0.1.0" }
 lsdocs-rpc = { path = "crates/rpc", version = "0.1.0" }
-lsdocs-plugin-sdk = { path = "crates/plugin-sdk", version = "0.1.0" }
+lsdocs-plugin-sdk = { path = "crates/plugin-sdk", version = "0.1.1" }
 lsdocs-plugin-sdk-bindings = { path = "crates/plugin-sdk-bindings", version = "0.1.0" }
 
 bytes = "1.12.1"

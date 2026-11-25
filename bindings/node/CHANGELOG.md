@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/lsdocs/lsdocs-plugin-sdk/compare/lsdocs-plugin-node/v0.1.0...lsdocs-plugin-node/v0.1.1) - 2026-11-25
+
+### Other
+
+- name the parser-myst builtin in place of parser-markdown ([#28](https://github.com/lsdocs/lsdocs-plugin-sdk/pull/28))
+- *(deps)* update dependency @types/node to v26.6.7 ([#26](https://github.com/lsdocs/lsdocs-plugin-sdk/pull/26))
+- *(deps)* update dependency @napi-rs/cli to v3.11.1 ([#22](https://github.com/lsdocs/lsdocs-plugin-sdk/pull/22))
+
 ## [0.1.0](https://github.com/lsdocs/lsdocs-plugin-sdk/releases/tag/lsdocs-plugin-node/v0.1.0) - 2026-11-22
 
 ### Added

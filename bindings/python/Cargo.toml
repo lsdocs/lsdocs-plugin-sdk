@@ -1,7 +1,7 @@
 [package]
 name = "lsdocs-plugin-python"
 description = "Python bindings (pyo3) for writing lsdocs plugins."
-version = "0.1.0"
+version = "0.1.1"
 publish = false
 edition.workspace = true
 rust-version.workspace = true

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/lsdocs/lsdocs-plugin-sdk/compare/lsdocs-plugin-python/v0.1.0...lsdocs-plugin-python/v0.1.1) - 2026-11-25
+
+### Other
+
+- name the parser-myst builtin in place of parser-markdown ([#28](https://github.com/lsdocs/lsdocs-plugin-sdk/pull/28))
+
 ## [0.1.0](https://github.com/lsdocs/lsdocs-plugin-sdk/releases/tag/lsdocs-plugin-python/v0.1.0) - 2026-11-22
 
 ### Added
