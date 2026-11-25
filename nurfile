@@ -176,8 +176,7 @@ def "nur gen node" [] {
 def "nur api" [] {
     let lsdocs = if ($env | get -o LSDOCS_BIN | default "") != "" { $env.LSDOCS_BIN } else {
         let root = $env.PWD | path join target lsdocs-bin
-        # TODO before merging: drop `--branch` once lsdocs#21 is merged.
-        with-env (org org-env) { run-cmd cargo install --quiet --git $"($org.ORG_URL)/lsdocs" --branch feat/markdown-dialects --root $root lsdocs }
+        with-env (org org-env) { run-cmd cargo install --quiet --git $"($org.ORG_URL)/lsdocs" --root $root lsdocs }
         $root | path join bin (if $nu.os-info.name == "windows" { "lsdocs.exe" } else { "lsdocs" })
     }
     let result = with-env ((org org-env) | insert LSDOCS_LOG "") {

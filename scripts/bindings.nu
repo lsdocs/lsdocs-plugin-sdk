@@ -29,8 +29,7 @@ export def lsdocs-bin []: nothing -> string {
         [--config $"patch.'($org.ORG_URL)/lsdocs-plugin-sdk'.($name).path='($dir)'"]
     } | flatten
     with-env (org org-env) {
-        # TODO before merging: drop `--branch` once lsdocs#21 is merged.
-        run-cmd cargo install --quiet --locked --force --git $"($org.ORG_URL)/lsdocs" --branch feat/markdown-dialects --root $root ...$patches lsdocs
+        run-cmd cargo install --quiet --locked --force --git $"($org.ORG_URL)/lsdocs" --root $root ...$patches lsdocs
     }
     $root | path join bin (if $nu.os-info.name == "windows" { "lsdocs.exe" } else { "lsdocs" })
 }
