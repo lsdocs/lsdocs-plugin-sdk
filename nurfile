@@ -140,14 +140,16 @@ def "nur test node" [] {
 
 # Runs the Lua tests (bindings/lua: the specs, and the toc port, which
 # needs an `lsdocs` binary as `nur test python` does) in an embedded Lua
-# 5.4 and, except on Windows (mlua's vendored LuaJIT needs an MSVC
-# developer prompt there), LuaJIT.
+# 5.4 and LuaJIT; on Windows, LuaJIT only from an MSVC developer prompt
+# (VCINSTALLDIR set; mlua's vendored LuaJIT builds with MSVC's tools).
 def "nur test lua" [] {
     use scripts/bindings.nu
     with-env {LSDOCS_BIN: (bindings lsdocs-bin)} {
         cargo-org test -p lsdocs-plugin-lua
-        if $nu.os-info.name != "windows" {
+        if $nu.os-info.name != "windows" or ("VCINSTALLDIR" in $env) {
             cargo-org test -p lsdocs-plugin-lua --no-default-features --features luajit,vendored
+        } else {
+            print "skipping the LuaJIT specs: no MSVC developer prompt (VCINSTALLDIR)"
         }
     }
 }

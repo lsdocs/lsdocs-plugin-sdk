@@ -38,9 +38,6 @@ adapt idioms.
       Lua plugins (only the Rust SDK has `Transformer::conclude`).
 - [ ] Node.js and Lua: send context events as they happen.
 - [ ] Lua: async handlers (coroutines), so handlers can overlap.
-- [ ] Lua: Windows modules (build-rocks.yml needs an MSVC Lua 5.4 and
-      LuaJIT to link to), and the LuaJIT tests on Windows (`nur test lua`
-      skips them: mlua's vendored LuaJIT needs an MSVC developer prompt).
 - [ ] `TypedDict`s (Python) and `.d.ts` types (Node.js) generated from
       lsdocs-protocol's `schema/`, and type-checked against its fixtures.
 - [ ] The binding packages declare their protocol version (now a string)

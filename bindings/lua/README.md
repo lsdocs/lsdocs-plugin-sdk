@@ -73,14 +73,17 @@ Lua 5.4), for running Lua plugins without a Lua installed:
 
 ## Building
 
-`nur test lua` runs the specs (`spec/*_spec.lua`) in an embedded Lua 5.4,
-and in LuaJIT except on Windows, then the toc port test
-(`examples/transform_toc.lua` must build the same site as the Rust
-`transform-toc`; it needs an `lsdocs` binary, LSDOCS_BIN). The module for
-an external Lua builds with `cargo build -p lsdocs-plugin-lua --release
---no-default-features --features lua54,module` (or `luajit,module`); the
-library (`liblsdocs_plugin_lua.so`) is installed as `lsdocs_plugin.so`. On
-macOS, link with `-C link-arg=-undefined -C link-arg=dynamic_lookup`.
+`nur test lua` runs the specs (`spec/*_spec.lua`) in an embedded Lua
+5.4, and in LuaJIT (on Windows, from an MSVC developer prompt), then the
+toc port test (`examples/transform_toc.lua` must build the same site as
+the Rust `transform-toc`; it needs an `lsdocs` binary, LSDOCS_BIN). The
+module for an external Lua builds with `cargo build -p lsdocs-plugin-lua
+--release --no-default-features --features lua54,module` (or
+`luajit,module`); the library (`liblsdocs_plugin_lua.so`) is installed
+as `lsdocs_plugin.so`. On macOS, link with `-C link-arg=-undefined -C
+link-arg=dynamic_lookup`. On Windows, the module binds `lua54.dll`
+(`lua51.dll` for LuaJIT) by name (mlua's raw-dylib linking): no Lua
+library is needed to build it.
 
 ## Known limitations
 
@@ -90,9 +93,10 @@ macOS, link with `-C link-arg=-undefined -C link-arg=dynamic_lookup`.
   Node.js).
 - `luarocks install lsdocs-plugin` installs the prebuilt module attached to the
   GitHub release (`lsdocs-plugin-lua/v<version>`) for Lua 5.4 or LuaJIT on Linux
-  (glibc) and macOS, x86_64 and aarch64; elsewhere, or where that module
-  does not load, it builds from source with cargo. `LSDOCS_PREBUILT=0`
-  always builds from source. No Windows modules yet.
+  (glibc) and macOS (x86_64 and aarch64) and Windows (x86_64, a Lua whose
+  DLL is `lua54.dll`, or LuaJIT's `lua51.dll`). Elsewhere, or where that
+  module does not load, it builds from source with cargo.
+  `LSDOCS_PREBUILT=0` always builds from source.
 
 [lsdocs]: https://github.com/lsdocs
 [mlua]: https://github.com/mlua-rs/mlua
