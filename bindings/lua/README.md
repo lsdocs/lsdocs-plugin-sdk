@@ -88,8 +88,11 @@ macOS, link with `-C link-arg=-undefined -C link-arg=dynamic_lookup`.
 - Context events reach the host when the handler returns.
 - No syntax declarations or generated documents (as for Python and
   Node.js).
-- No Windows modules yet, and no prebuilt ones on luarocks.org: the
-  rockspec builds from source with cargo.
+- No Windows modules yet, and not on luarocks.org: each GitHub release
+  (`lsdocs-plugin-lua/v<version>`) carries the rockspec, which builds from source
+  with cargo (`luarocks install <its URL>`), and the prebuilt modules
+  (`<module>-<version>-<lua>-<target>.tar.gz`, for `package.cpath`),
+  which the rockspec does not use yet.
 
 [lsdocs]: https://github.com/lsdocs
 [mlua]: https://github.com/mlua-rs/mlua
