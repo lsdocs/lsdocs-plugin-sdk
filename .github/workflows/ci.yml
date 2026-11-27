@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # TEMP: verify lsdocs/.github's branch; revert before merging.
+    branches: [main, ccr-05990b37-mdy4p6]
     # Files that cannot change a build.
     paths-ignore: &no-build
       - "*.md"
@@ -23,7 +24,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: lsdocs/.github/.github/workflows/ci.yml@main
+    uses: lsdocs/.github/.github/workflows/ci.yml@ccr-05990b37-mdy4p6
     permissions:
       contents: read
     with:

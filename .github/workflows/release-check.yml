@@ -5,6 +5,9 @@ name: Release check
 # ci.yml: its path filter skips a release PR that changes only changelogs.
 # On other pull requests every job is skipped.
 on:
+  # TEMP: verify lsdocs/.github's branch; revert before merging.
+  push:
+    branches: [ccr-05990b37-mdy4p6]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
@@ -75,10 +78,7 @@ jobs:
   # The version the rockspec gets: lsdocs-plugin-lua's (the tag's, at
   # release).
   lua-version:
-    if: >-
-      github.event_name == 'pull_request'
-      && startsWith(github.head_ref, 'release-plz-')
-      && !github.event.pull_request.draft
+    if: github.event_name == 'push' # TEMP
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -99,7 +99,7 @@ jobs:
   # can, and the rockspec, linted (artifacts unused).
   rocks:
     needs: lua-version
-    uses: lsdocs/.github/.github/workflows/build-rocks.yml@main
+    uses: lsdocs/.github/.github/workflows/build-rocks.yml@ccr-05990b37-mdy4p6
     permissions:
       contents: read
     with:
@@ -109,3 +109,4 @@ jobs:
       module: lsdocs_plugin
       rockspec: lsdocs-plugin.rockspec.in
       version: ${{ needs.lua-version.outputs.version }}
+      backend-ref: ccr-05990b37-mdy4p6 # TEMP
