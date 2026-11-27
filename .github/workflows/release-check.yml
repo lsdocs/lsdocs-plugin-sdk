@@ -109,4 +109,4 @@ jobs:
       module: lsdocs_plugin
       rockspec: lsdocs-plugin.rockspec.in
       version: ${{ needs.lua-version.outputs.version }}
-      backend-ref: ccr-05990b37-mdy4p6 # TEMP
+      backend-ref: 0242c201b5aa8f1733ce1bf63e1bdad8c4a8f585 # TEMP
